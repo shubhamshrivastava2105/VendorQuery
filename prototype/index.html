@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neoflo · Vendor Queries — Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="design_tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Prototype banner -->
+  <div id="proto-banner">
+    <span class="proto-dot"></span>
+    <strong>Interactive prototype</strong>
+    <span class="proto-sep">·</span>
+    <span>Vendor Queries — a new workflow on the Neoflo platform. All data is illustrative.</span>
+    <button id="proto-tour" class="proto-tour-btn">Start guided tour ›</button>
+  </div>
+
+  <div id="app">
+    <!-- ─── Sidebar ─── -->
+    <aside id="sidebar">
+      <div class="sb-brand">
+        <div class="sb-logo">
+          <img class="sb-logo-img" src="neoflo_logo.png" alt="Neoflo" />
+        </div>
+        <button class="sb-collapse" title="Collapse">‹</button>
+      </div>
+
+      <nav class="sb-nav" id="sb-nav">
+        <div class="sb-section-label">Vendor Queries</div>
+        <a class="sb-child active" data-view="worklist" title="Queries">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg></span>
+          <span class="sb-ctext">Queries</span><span class="sb-count" id="nav-open-count">6</span></a>
+        <a class="sb-child" data-view="inbox" title="Vendor Inbox (demo)">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span>
+          <span class="sb-ctext">Vendor Inbox</span><span class="sb-badge" title="Simulator — an interactive demo of vendor emails flowing through the pipeline. Not a live mailbox.">demo</span></a>
+        <a class="sb-child" data-view="ingestion" title="Ingestion log">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.4 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.8 1.1z"/></svg></span>
+          <span class="sb-ctext">Ingestion log</span></a>
+        <a class="sb-child" data-view="analytics" title="Analytics">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="8"/><line x1="18" y1="20" x2="18" y2="11"/></svg></span>
+          <span class="sb-ctext">Analytics</span></a>
+        <a class="sb-child" data-view="integrations" title="Integrations">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+          <span class="sb-ctext">Integrations</span></a>
+        <a class="sb-child" data-view="config" title="Configuration">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span class="sb-ctext">Configuration</span></a>
+        <a class="sb-child" data-view="how" title="How it works">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          <span class="sb-ctext">How it works</span></a>
+      </nav>
+
+      <div class="sb-footer">
+        <div class="sb-avatar">SS</div>
+        <div class="sb-user">
+          <div class="sb-user-name">Shubham S.</div>
+          <div class="sb-user-role">AP · Admin</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ─── Main ─── -->
+    <main id="main">
+      <header id="topbar">
+        <div class="tb-left">
+          <div class="tb-crumb" id="tb-crumb">Vendor Queries</div>
+          <div class="tb-sub" id="tb-sub">How it works</div>
+        </div>
+        <div class="tb-right">
+          <button class="tb-ws-trigger" id="ws-trigger">
+            <span class="tb-ws-mark">VQ</span>
+            <span class="tb-ws-name">Vendor Queries</span>
+            <span class="tb-caret">⌄</span>
+          </button>
+          <div class="tb-avatar">SS</div>
+        </div>
+      </header>
+
+      <div id="view"><!-- views render here --></div>
+    </main>
+  </div>
+
+  <!-- Query detail slide-over -->
+  <div id="overlay" class="overlay hidden"></div>
+  <aside id="detail" class="detail hidden"></aside>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
