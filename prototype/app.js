@@ -152,16 +152,16 @@ function renderWorklist() {
     <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end">
       <div>
         <div class="page-title">Queries</div>
-        <div class="page-desc">Every vendor query in one place — auto-answered and human-routed alike. Open any to see the context and a suggested reply.</div>
+        <div class="page-desc">Auto-answered and human-routed queries in one place.</div>
       </div>
       <button class="btn btn-primary btn-sm" id="wl-new">＋ New manual query</button>
     </div>
 
     <div class="metrics" style="margin-bottom:16px">
-      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Auto-contained · today</div><div class="m-value">${auto}<span class="m-delta up">▲ no human touch</span></div><div class="m-sub">Replied automatically on receipt</div></div>
-      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Need a human</div><div class="m-value">${human}</div><div class="m-sub">Open in the queue with a context bundle</div></div>
-      <div class="metric" style="--c:var(--red-500)"><div class="m-label">SLA breaches</div><div class="m-value">${breaches}</div><div class="m-sub">Past response target — act now</div></div>
-      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Containment · today</div><div class="m-value">${Math.round(auto/total*100)}%</div><div class="m-sub">${auto} of ${total} queries</div></div>
+      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Auto-answered</div><div class="m-value">${auto}</div><div class="m-sub">Today</div></div>
+      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Need a person</div><div class="m-value">${human}</div><div class="m-sub">In the queue</div></div>
+      <div class="metric" style="--c:var(--red-500)"><div class="m-label">SLA breaches</div><div class="m-value">${breaches}</div><div class="m-sub">Past target</div></div>
+      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Containment</div><div class="m-value">${Math.round(auto/total*100)}%</div><div class="m-sub">${auto} of ${total}</div></div>
     </div>
 
     <div class="card">
@@ -224,13 +224,13 @@ function openNewQueryModal() {
   const typeOpts = Object.keys(TYPECLS).filter(t => t !== "Unverified sender").map(t => `<option value="${t}">${t}</option>`).join("");
   modal({
     title: "New manual query",
-    subtitle: "Rare — most queries arrive via Freshdesk. Logged the same way and gated by identity.",
+    subtitle: "Most queries arrive automatically via Freshdesk.",
     primary: "Create query",
     body: `
       <div class="form-row">
         <label>Vendor · search the registry</label>
         ${vendorPickerHtml("vp-nq", "Search vendor by name or email…")}
-        <div class="form-hint" id="vp-nq-hint">Identity is checked against this vendor's authorised contacts (Epic B).</div>
+        <div class="form-hint" id="vp-nq-hint">Identity is checked against this vendor's verified contacts.</div>
       </div>
       <div class="form-row"><label>Query type</label><select id="nq-type">${typeOpts}</select></div>
       <div class="form-row"><label>What is the vendor asking?</label><textarea id="nq-msg" placeholder="e.g. Has invoice INV-2098 been paid?"></textarea></div>`,
@@ -259,11 +259,11 @@ function humanPack(q, sc) {
   if (sc && sc.outcome === "routed") return {
     records: [
       ["Invoice", "INV-2451", `${q.entity.ccy} ${sc.amount}`],
-      ["Goods-receipt value", `${q.entity.ccy} 579.00`, "SAP paid against GR"],
-      ["Posting ID", sc.postingId, "Accounting Entry"],
-      ["Payment doc", sc.paymentDoc, "Cleared"],
+      ["Goods-receipt value", `${q.entity.ccy} 579.00`, "paid against GR"],
+      ["Posting ID", sc.postingId, ""],
+      ["Payment doc", sc.paymentDoc, "cleared"],
     ],
-    summary: `${q.vendor} says it was short-paid PHP 53 on INV-2451. The system already pulled the cause: the invoice was ${q.entity.ccy} ${sc.amount} but the goods-receipt was only ${q.entity.ccy} 579.00, so SAP paid against the GR — a GR-based short-pay, not an error (same 3-way matching rule as P2P).`,
+    summary: `Short-paid PHP 53 on INV-2451. Cause: invoiced ${q.entity.ccy} ${sc.amount}, but the goods-receipt was ${q.entity.ccy} 579.00 — paid against the GR, not an error.`,
     suggestion: sc.route.suggest, draft: sc.route.draft,
   };
   if (sc && sc.outcome === "captured") return {
@@ -271,40 +271,40 @@ function humanPack(q, sc) {
       ["Requested (unverified)", sc.capture.requested, "from inbound email"],
       ["Current on file", sc.capture.current, "vendor master"],
     ],
-    summary: `${q.vendor} asked to change their bank account to ${sc.capture.requested}. Identity passed, but bank changes are captured only — there is no write path to the vendor master in v0. It must be verified out-of-band before anything is applied.`,
+    summary: `Request to change bank account to ${sc.capture.requested}. Identity passed, but bank changes are never applied automatically — verify by phone before anything is changed.`,
     suggestion: sc.capture.stepup,
     draft: "Hi, thanks for your request to update your banking details. For your security we verify every bank-account change by phone, using the number we already hold on file, before applying it — we'll call you shortly to confirm. No payment will use the new account until that check is complete.",
   };
   if (sc && sc.outcome === "authfail") return {
     records: [],
-    summary: `Inbound sender ${sc.email} could not be matched to the authorization registry, and the domain mimics a real vendor (…-billing.net vs …-bi.com) — a likely business-email-compromise attempt. The gate disclosed nothing.`,
-    suggestion: "Confirm out-of-band with the known Fujifilm contact on file. If genuine, onboard the address to the registry; if not, flag as fraud — do not reply with any balance or account detail.",
+    summary: `Sender ${sc.email} isn't a verified contact, and the domain mimics a real vendor (…-billing.net vs …-bi.com) — likely impersonation. Nothing was disclosed.`,
+    suggestion: "Confirm with the known contact on file. If genuine, add the address; if not, flag as fraud — never share any balance or account detail.",
     draft: "Thank you for getting in touch. Before we can share any account or payment information we need to verify your identity. Please reply from your registered company email address, or contact your usual AP representative directly.",
   };
   if (q.qstate === "reopened") return {
-    records: [["Original auto-answer", "Paid · TXN-55218", "vendor disputes this"]],
-    summary: `${q.vendor} replied to a closed auto-answer disputing the figures. By design the system never silently re-auto-answers a pushed-back query — it reopened the same ticket and routed it to a human, with the original answer and assembled context attached.`,
-    suggestion: "Re-check the disputed figures against the payment document and goods-receipt, then reply personally. Do not let it re-auto-answer.",
+    records: [["Original answer", "Paid · TXN-55218", "vendor disputes this"]],
+    summary: `Vendor replied to a closed answer disputing the figures. It reopened and routed to a person, with the original answer and context attached.`,
+    suggestion: "Re-check the disputed figures against the payment document and goods-receipt, then reply personally.",
     draft: "Thanks for getting back to us — I've reopened your query and it's now with me personally. Let me re-check the figures against our records and I'll come back to you with a clear breakdown shortly.",
   };
   // statement reconciliation / generic human
   return {
     records: [
       ["Paid", "5 of 10", "cleared"],
-      ["Awaiting GR/SES", "3 of 10", "stuck pre-payment"],
-      ["Rejected · duplicate", "2 of 10", "flagged upstream"],
+      ["Awaiting GR/SES", "3 of 10", "pre-payment"],
+      ["Rejected · duplicate", "2 of 10", "flagged"],
     ],
-    summary: `${q.vendor} asks why only 5 of 10 invoices are paid. Of the 10: 5 are paid, 3 are awaiting goods-receipt/service-entry confirmation, and 2 were rejected as duplicates. Listing statuses is easy; confirming the stuck lines needs stage/reason data a human should verify (stretch, Epic G).`,
-    suggestion: "Confirm the 3 awaiting-GR/SES lines with receiving and the 2 duplicate flags, then send a line-by-line breakdown.",
+    summary: `Why only 5 of 10 invoices are paid: 5 paid, 3 awaiting goods-receipt confirmation, 2 rejected as duplicates.`,
+    suggestion: "Confirm the 3 awaiting-GR lines with receiving and the 2 duplicate flags, then send a line-by-line breakdown.",
     draft: "Hi, thanks for your statement query. Of the 10 invoices, 5 are paid, 3 are awaiting goods-receipt/service-entry confirmation, and 2 were flagged as duplicates. I'm confirming the stuck items with our team and will send you a line-by-line breakdown shortly.",
   };
 }
 
-// Platform-side assignment (VQ-H3) — only when not assigned in Freshdesk
+// Platform-side assignment — only when not assigned in Freshdesk
 function assignQueryTo(q, name) {
   q.assignee = name;
   q.assignSource = "platform";
-  toast(`Assigned to ${name === ME ? 'you' : name} on the platform. Change audited (VQ-K1).`);
+  toast(`Assigned to ${name === ME ? 'you' : name}.`);
   refreshBackground();
   openDetailById(q.id);
 }
@@ -312,11 +312,11 @@ function openAssignModal(q) {
   const opts = TEAM.map(m => `<option value="${m.name}">${m.name} — ${m.role}${m.you ? ' (you)' : ''}</option>`).join("");
   modal({
     title: "Assign on the platform",
-    subtitle: "Not assigned on the Freshdesk ticket — assign it here (org/workspace admin). VQ-H3.",
+    subtitle: "Not assigned on the Freshdesk ticket — assign it here.",
     primary: "Assign",
     body: `
       <div class="form-row"><label>Assign to</label><select id="asg-who">${opts}</select></div>
-      <div class="form-hint">Every routed query has exactly one accountable assignee; assignment changes are audit-logged (VQ-K1).</div>`,
+      <div class="form-hint">Every query has one accountable assignee; changes are audit-logged.</div>`,
     onPrimary: () => assignQueryTo(q, $("#asg-who").value),
   });
 }
@@ -337,25 +337,25 @@ function openDetailById(id) {
 
   // banner
   let banner;
-  if (q.qstate === "authfail") banner = `<div class="dt-banner red">⚠️ Identity check failed — possible impersonation. No financial data was disclosed.</div>`;
-  else if (q.qstate === "captured") banner = `<div class="dt-banner purple">🔏 Bank-detail change captured. No write path to the vendor master exists in v0 — verify out-of-band before applying.</div>`;
-  else if (q.qstate === "breached") banner = `<div class="dt-banner red">⏰ SLA breached. This routed query is past its response target.</div>`;
-  else if (q.qstate === "reopened") banner = `<div class="dt-banner blue">↺ Reopened — the vendor pushed back on a closed auto-answer. Now with a human.</div>`;
-  else if (isAuto) banner = `<div class="dt-banner green">✅ Auto-answered — contained with no human touch. Reply sent on the same thread in ${q.resolved}.</div>`;
-  else if (isClosed) banner = `<div class="dt-banner grey">✔ Closed — resolved by ${q.assignee} in ${q.resolved}. Read-only.</div>`;
-  else banner = `<div class="dt-banner orange">↗ Routed to a human — context bundle assembled. Zero additional look-ups required to start.</div>`;
+  if (q.qstate === "authfail") banner = `<div class="dt-banner red">⚠️ Identity check failed — possible impersonation. Nothing was disclosed.</div>`;
+  else if (q.qstate === "captured") banner = `<div class="dt-banner purple">🔏 Bank-change request captured. Never applied automatically — verify by phone first.</div>`;
+  else if (q.qstate === "breached") banner = `<div class="dt-banner red">⏰ SLA breached — past its response target.</div>`;
+  else if (q.qstate === "reopened") banner = `<div class="dt-banner blue">↺ Reopened — the vendor pushed back on a closed answer. Now with a person.</div>`;
+  else if (isAuto) banner = `<div class="dt-banner green">✅ Auto-answered in ${q.resolved} — no one touched it.</div>`;
+  else if (isClosed) banner = `<div class="dt-banner grey">✔ Closed — resolved by ${q.assignee} in ${q.resolved}.</div>`;
+  else banner = `<div class="dt-banner orange">↗ Routed to a person — context assembled, ready to respond.</div>`;
 
   // ── core: human summarized view vs auto read-only ──
   let core;
   if (isAuto) {
-    const lad = sc?.ladder ? `<div class="ladder-wrap"><div class="ladder-k">Payment status ladder (VQ-E1)</div>${ladderHtml(sc.ladder)}</div>` : "";
+    const lad = sc?.ladder ? `<div class="ladder-wrap"><div class="ladder-k">Payment status</div>${ladderHtml(sc.ladder)}</div>` : "";
     const reply = sc ? `<strong>${sc.answer.lead}</strong> ${sc.answer.body}` : `Answered automatically — ${q.reason}.`;
-    const stamp = sc ? sc.answer.stamp : "Composed from live records · auth_check ✓";
+    const stamp = sc ? sc.answer.stamp : "Composed from live records · identity verified";
     core = `
       <div class="card card-pad">
-        <div class="dt-section-title">What the system sent <span class="tag" style="margin-left:6px">no human touch</span></div>
+        <div class="dt-section-title">What we sent <span class="tag" style="margin-left:6px">no human touch</span></div>
         ${lad}
-        <div class="reply-box"><div class="rb-meta"><span>To: ${q.email}</span><span>·</span><span>auth_check ✓</span><span>·</span><span>${fd}</span></div>
+        <div class="reply-box"><div class="rb-meta"><span>To: ${q.email}</span><span>·</span><span>identity ✓</span><span>·</span><span>${fd}</span></div>
           <div class="rb-answer">${reply}</div><div class="reply-stamp">⏱ ${stamp}</div></div>
       </div>`;
   } else if (isClosed) {
@@ -368,18 +368,18 @@ function openDetailById(id) {
     const pack = humanPack(q, sc);
     core = `
       <div class="card card-pad">
-        <div class="dt-section-title">Summary <span class="tag" style="margin-left:6px">AI-assembled · for a human</span></div>
+        <div class="dt-section-title">Summary <span class="tag" style="margin-left:6px">auto-assembled</span></div>
         <div class="summary-box"><div class="sm-k">What's going on</div><div class="sm-v">${pack.summary}</div></div>
-        ${pack.records.length ? `<div class="spacer-12"></div><div class="dt-section-title">Records pulled</div>${bundleGrid(pack.records)}` : ""}
+        ${pack.records.length ? `<div class="spacer-12"></div><div class="dt-section-title">Records</div>${bundleGrid(pack.records)}` : ""}
         <div class="spacer-12"></div>
         <div class="suggest-box"><div class="sx-k">💡 Suggested next step</div><div class="sx-v">${pack.suggestion}</div></div>
       </div>
       <div class="card card-pad">
-        <div class="dt-section-title">Suggested reply <span class="tag" style="margin-left:6px">editable · English (Phase 1)</span></div>
+        <div class="dt-section-title">Suggested reply <span class="tag" style="margin-left:6px">editable</span></div>
         <div class="reply-tools">
           <button class="btn btn-sm" id="rt-regen">↻ Regenerate</button>
-          <button class="btn btn-sm" id="rt-reset">Reset to suggestion</button>
-          <span style="margin-left:auto;font-size:11.5px;color:var(--muted)">You're responding as ${q.assignee==='Unassigned'?'(assign yourself first)':q.assignee} · maker-checker</span>
+          <button class="btn btn-sm" id="rt-reset">Reset</button>
+          <span style="margin-left:auto;font-size:11.5px;color:var(--muted)">Responding as ${q.assignee==='Unassigned'?'(assign yourself first)':q.assignee}</span>
         </div>
         <textarea class="draft" id="dt-draft">${pack.draft}</textarea>
       </div>`;
@@ -402,7 +402,7 @@ function openDetailById(id) {
       <div class="dt-head-actions">
         ${isHuman ? `
           ${unassigned?`<button class="btn btn-sm" id="dt-assign">${role.assignOthers?'Assign…':'Assign to me'}</button>`:''}
-          ${q.qstate==='captured'?`<button class="btn btn-sm dt-terminal" style="color:var(--red-600);border-color:var(--red-200)" data-msg="Bank change rejected. Vendor master unchanged." data-newstate="closed">Reject change</button><button class="btn btn-primary btn-sm dt-terminal" data-msg="Verified out-of-band & applied. Freshdesk → Neoflo - Closed." data-newstate="closed">✓ Verify & send</button>`
+          ${q.qstate==='captured'?`<button class="btn btn-sm dt-terminal" style="color:var(--red-600);border-color:var(--red-200)" data-msg="Bank change rejected. Vendor master unchanged." data-newstate="closed">Reject change</button><button class="btn btn-primary btn-sm dt-terminal" data-msg="Verified by phone & applied." data-newstate="closed">✓ Verify & send</button>`
             : q.qstate==='authfail'?`<button class="btn btn-sm dt-terminal" style="color:var(--red-600);border-color:var(--red-200)" data-msg="Flagged as fraud. Attempt logged; no disclosure." data-newstate="closed">Flag as fraud</button><button class="btn btn-primary btn-sm dt-terminal" data-msg="Safe non-disclosing reply sent." data-newstate="closed">Send safe reply</button>`
             : `<button class="btn btn-primary btn-sm dt-terminal" data-msg="Reply sent. Freshdesk → Neoflo - Closed." data-newstate="closed">Send reply & close</button>`}`
         : '<button class="btn btn-sm" id="dt-reopen">↺ Reopen</button>'}
@@ -419,7 +419,7 @@ function openDetailById(id) {
       </div>
 
       ${isHuman && unassigned ? `<div class="dt-banner ${role.assignOthers?'blue':'grey'}" style="display:block">
-        🧑‍💼 <strong>Not assigned on the Freshdesk ticket.</strong> Assignment normally syncs from Freshdesk; when it hasn't, ${role.assignOthers ? 'you can assign it on the platform (you\'re an <strong>'+currentRole+'</strong>) — pick a team member or take it yourself.' : 'an <strong>org/workspace admin</strong> assigns it on the platform. As an <strong>'+currentRole+'</strong> you can take it yourself, but not assign others.'} <span style="color:var(--muted)">VQ-H3 · assignment changes are audited.</span>
+        🧑‍💼 <strong>Not assigned on the Freshdesk ticket.</strong> ${role.assignOthers ? 'Assign it on the platform — pick a team member or take it yourself.' : 'An org/workspace admin assigns it on the platform; you can take it yourself.'}
       </div>` : ''}
 
       <div class="card card-pad">
@@ -431,11 +431,11 @@ function openDetailById(id) {
       </div>
 
       <div class="card card-pad">
-        <div class="dt-section-title">Identity result <span class="tag" style="margin-left:6px">Epic B</span></div>
+        <div class="dt-section-title">Identity check</div>
         <dl class="kv">
-          <dt>auth_check</dt><dd>${q.qstate==='authfail'?pill('red','FAILED',true):pill('green','PASSED',true)}</dd>
-          <dt>Matched contact</dt><dd>${q.qstate==='authfail'?'— (no match in registry)':q.email}</dd>
-          <dt>Authorised scope</dt><dd>${q.qstate==='authfail'?'—':entLabel(q.entity)+' · vendor’s own records'}</dd>
+          <dt>Result</dt><dd>${q.qstate==='authfail'?pill('red','FAILED',true):pill('green','PASSED',true)}</dd>
+          <dt>Matched contact</dt><dd>${q.qstate==='authfail'?'— (no match)':q.email}</dd>
+          <dt>Scope</dt><dd>${q.qstate==='authfail'?'—':entLabel(q.entity)+' · own records'}</dd>
         </dl>
       </div>
 
@@ -447,18 +447,18 @@ function openDetailById(id) {
       </div>` : ''}
 
       <div class="card card-pad">
-        <div class="dt-section-title">Audit trail <span class="tag" style="margin-left:6px">immutable · 100% coverage · Epic K</span></div>
-        <div class="audit-row"><span class="ar-t">${q.ts.split('· ')[1]||'08:15'}</span><span class="ar-d"><strong>Routing decision</strong> · reply classified → vendor-query workflow${q.qstate==='captured'?' (action)':''} (Epic M)</span></div>
+        <div class="dt-section-title">Audit trail <span class="tag" style="margin-left:6px">immutable</span></div>
+        <div class="audit-row"><span class="ar-t">${q.ts.split('· ')[1]||'08:15'}</span><span class="ar-d"><strong>Routed</strong> · classified → vendor-query workflow${q.qstate==='captured'?' (action)':''}</span></div>
         <div class="audit-row"><span class="ar-t">+0s</span><span class="ar-d"><strong>Intake</strong> · email parsed into ${q.id}</span></div>
-        <div class="audit-row"><span class="ar-t">+1s</span><span class="ar-d"><strong>Identity gate</strong> · ${q.qstate==='authfail'?'auth_check FAILED — disclosure blocked':'auth_check passed'}</span></div>
-        <div class="audit-row"><span class="ar-t">+2s</span><span class="ar-d"><strong>${q.qstate==='captured'?'G0 · Action — held for human':'Context assembled'}</strong> · ${q.qstate==='captured'?'state-changing request never auto-resolves':'records fetched from Neoflo (P2P) + ERP + vendor storage'}</span></div>
-        <div class="audit-row"><span class="ar-t">+3s</span><span class="ar-d"><strong>${isAuto?'Auto-answered':isClosed?'Closed':'Routed'}</strong> · ${q.reason} · Freshdesk → ${fd}</span></div>
+        <div class="audit-row"><span class="ar-t">+1s</span><span class="ar-d"><strong>Identity check</strong> · ${q.qstate==='authfail'?'failed — disclosure blocked':'passed'}</span></div>
+        <div class="audit-row"><span class="ar-t">+2s</span><span class="ar-d"><strong>${q.qstate==='captured'?'Action — held for a person':'Context assembled'}</strong> · ${q.qstate==='captured'?'never auto-resolved':'invoice workflow + ERP + vendor storage'}</span></div>
+        <div class="audit-row"><span class="ar-t">+3s</span><span class="ar-d"><strong>${isAuto?'Auto-answered':isClosed?'Closed':'Routed'}</strong> · ${q.reason} · ${fd}</span></div>
       </div>
     </div>
 
     <div class="dt-foot">
       ${isHuman ? `
-        ${q.qstate==='captured'?'<button class="btn btn-primary dt-terminal" data-msg="Verified out-of-band & applied. Freshdesk → Neoflo - Closed." data-newstate="closed">✓ Verify & approve change</button><button class="btn dt-terminal" data-msg="Bank change rejected. Vendor master unchanged." data-newstate="closed">Reject</button>'
+        ${q.qstate==='captured'?'<button class="btn btn-primary dt-terminal" data-msg="Verified by phone & applied." data-newstate="closed">✓ Verify & approve change</button><button class="btn dt-terminal" data-msg="Bank change rejected. Vendor master unchanged." data-newstate="closed">Reject</button>'
           : q.qstate==='authfail'?'<button class="btn btn-primary dt-terminal" data-msg="Safe non-disclosing reply sent." data-newstate="closed">Send safe reply</button><button class="btn dt-terminal" style="color:var(--red-600);border-color:var(--red-200)" data-msg="Flagged as fraud. Attempt logged." data-newstate="closed">Flag as fraud</button>'
           : '<button class="btn btn-primary dt-terminal" data-msg="Reply sent. Freshdesk → Neoflo - Closed." data-newstate="closed">Send reply & close</button><button class="btn" data-toast="Draft saved.">Save draft</button>'}`
         : '<button class="btn" data-close>Close</button>'}
@@ -502,15 +502,15 @@ function renderAnalytics() {
   const donut = (segs) => { let acc=0; return `conic-gradient(${segs.map(s=>{const f=acc;acc+=s.pct;return `${s.c} ${f}% ${acc}%`;}).join(", ")})`; };
   VIEW.innerHTML = `
     <div class="page-head">
-      <div class="page-title">Vendor Queries — Analytics</div>
-      <div class="page-desc">Manage by numbers. Containment is the north-star (Phase 1 target 40%), watched alongside auto-answer accuracy (95%+ bar), routing accuracy (98%) and the counter-metrics (re-ask, inferred satisfaction proxy) so containment is never "won" by frustrating vendors. Targets are validated against the Phase 0 baseline.</div>
+      <div class="page-title">Analytics</div>
+      <div class="page-desc">Last 30 days.</div>
     </div>
     <div class="metrics" style="margin-bottom:18px">
       ${A.metrics.map(m => { const drill = m.label.startsWith("Coverage"); return `
-        <div class="metric ${drill?'clickable':''}" style="--c:${m.c}" ${drill?'data-go="ingestion"':''}><div class="m-run">Last run: today</div>
+        <div class="metric ${drill?'clickable':''}" style="--c:${m.c}" ${drill?'data-go="ingestion"':''}>
           <div class="m-label">${m.label}</div>
           <div class="m-value">${m.value} <span class="m-delta ${m.up?'up':'down'}">${m.up?'▲':'▼'} ${m.delta}</span></div>
-          <div class="m-sub">${m.sub}${drill?' · <span class="m-link">view the 12 unparsed →</span>':''}</div></div>`; }).join("")}
+          <div class="m-sub">${m.sub}</div></div>`; }).join("")}
     </div>
     <div class="row" style="margin-bottom:16px;align-items:stretch">
       <div class="card card-pad" style="flex:1.1">
@@ -525,47 +525,46 @@ function renderAnalytics() {
     </div>
     <div class="row" style="margin-bottom:16px;align-items:stretch">
       <div class="card card-pad" style="flex:1">
-        <div class="section-label">Routing service <span class="sl-side">Epic M · Milestone 1 · multi-label</span></div>
+        <div class="section-label">Routing service</div>
         <div class="bar-row"><div class="br-label" style="font-weight:600">Routing accuracy</div><div class="bar-track"><div class="bar-fill" style="width:98.1%;background:var(--purple-500)"></div></div><div class="br-val">98.1%</div></div>
-        <div class="reply-stamp" style="margin:6px 0 12px">Every new ticket and every new reply gets its own routing decision; a reply that is both an invoice and a query enters both workflows. Low-confidence routing defaults to a human triage queue, never dropped (VQ-M4).</div>
+        <div class="spacer-12"></div>
         <div class="section-label">Where replies route <span class="sl-side">last 30 days</span></div>
         ${A.routing.map(r => `<div class="bar-row"><div class="br-label">${r.label}</div><div class="bar-track"><div class="bar-fill" style="width:${r.pct}%;background:${r.c}"></div></div><div class="br-val">${r.pct}%</div></div>`).join("")}
       </div>
     </div>
     <div class="row" style="align-items:stretch">
       <div class="card card-pad" style="flex:1">
-        <div class="section-label">Hard guardrails <span class="sl-side">non-negotiable · from day one</span></div>
+        <div class="section-label">Guardrails</div>
         <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:12px">
           <div class="guardrail"><div class="g-ico">🔒</div><div class="g-txt"><strong>0</strong><span>Unauthorized disclosures</span></div></div>
-          <div class="guardrail"><div class="g-ico">🏦</div><div class="g-txt"><strong>0</strong><span>Fraudulent bank changes applied</span></div></div>
-          <div class="guardrail"><div class="g-ico">📋</div><div class="g-txt"><strong>100%</strong><span>Audit coverage (every action)</span></div></div>
+          <div class="guardrail"><div class="g-ico">🏦</div><div class="g-txt"><strong>0</strong><span>Bank changes auto-applied</span></div></div>
+          <div class="guardrail"><div class="g-ico">📋</div><div class="g-txt"><strong>100%</strong><span>Audit coverage</span></div></div>
         </div>
         <div class="spacer-16"></div>
-        <div class="section-label">Counter-metrics <span class="sl-side">satisfaction is inferred — email has no rating surface (§4.4)</span></div>
+        <div class="section-label">Counter-metrics <span class="sl-side">satisfaction inferred from behaviour</span></div>
         <div class="bar-row"><div class="br-label">Vendor re-ask rate</div><div class="bar-track"><div class="bar-fill" style="width:6.4%;background:var(--green-500)"></div></div><div class="br-val">6.4%</div></div>
         <div class="bar-row"><div class="br-label">Reply sentiment (positive)</div><div class="bar-track"><div class="bar-fill" style="width:82%;background:var(--primary-500)"></div></div><div class="br-val">82%</div></div>
         <div class="bar-row"><div class="br-label">Dispute / reopen rate</div><div class="bar-track"><div class="bar-fill" style="width:4.1%;background:var(--orange-500)"></div></div><div class="br-val">4.1%</div></div>
       </div>
       <div class="card card-pad" style="flex:1">
-        <div class="section-label">Driver analysis <span class="sl-side">what generates the most questions → feed P2P roadmap</span></div>
+        <div class="section-label">What drives the questions <span class="sl-side">upstream causes</span></div>
         ${A.drivers.map(d => `<div class="bar-row"><div class="br-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${d.pct}%;background:${d.c}"></div></div><div class="br-val">${d.pct}%</div></div>`).join("")}
-        <div class="reply-stamp" style="margin-top:14px">Each driver is an upstream problem causing vendor questions. Fixing payment-block release upstream would deflect ~34% of routed disputes at source (Phase 2).</div>
       </div>
     </div>`;
 }
 
 /* ─────────────────────────── CONFIGURATION ─────────────────────────── */
-// Per-intent handling mode (VQ-L3): off | human | automated. Actions are locked to human (G0 / §6.1).
+// Per-intent handling mode: off | human | automated. Actions are locked to human.
 const CAPS = [
-  { k: "Payment status", d: "VQ-E1 ladder — the anchor; “paid” only at clearing", kind: "query", mode: "automated", locked: true },
-  { k: "Payment breakdown (remittance)", d: "VQ-E2 — needs readable remittance (Phase 0 gate)", kind: "query", mode: "automated" },
-  { k: "Document request", d: "VQ-E3 — PO / invoice copy / payment proof", kind: "query", mode: "automated" },
-  { k: "Invoice receipt", d: "VQ-E5 — lookup cascade; a “no record” conclusion routes", kind: "query", mode: "automated" },
-  { k: "Tax certificate", d: "VQ-E4 — auto when on file in vendor storage (Epic N), else routes", kind: "query", mode: "automated" },
-  { k: "Tax-rate explanation", d: "Stretch — rule-based; escalate if it doesn’t reconcile", kind: "query", mode: "human" },
-  { k: "Statement reconciliation", d: "Stretch — depends on stage/reason data access", kind: "query", mode: "human" },
-  { k: "Bank-detail change", d: "State-changing action — captured & routed, never auto-applied (Epic I)", kind: "action", mode: "human", locked: true },
-  { k: "Address change", d: "State-changing action — always routed to a human (G0)", kind: "action", mode: "human", locked: true },
+  { k: "Payment status", d: "“Paid” only stated once cleared", kind: "query", mode: "automated", locked: true },
+  { k: "Payment breakdown", d: "Which invoices a payment covers, with deductions", kind: "query", mode: "automated" },
+  { k: "Document request", d: "PO, invoice copy, payment proof", kind: "query", mode: "automated" },
+  { k: "Invoice receipt", d: "Whether an invoice was received and where it stands", kind: "query", mode: "automated" },
+  { k: "Tax certificate", d: "Auto-served when on file in vendor storage, else routed", kind: "query", mode: "automated" },
+  { k: "Tax-rate explanation", d: "Rule-based; escalate if it doesn’t reconcile", kind: "query", mode: "human" },
+  { k: "Statement reconciliation", d: "List statuses; explain anything stuck", kind: "query", mode: "human" },
+  { k: "Bank-detail change", d: "Captured & routed, never applied automatically", kind: "action", mode: "human", locked: true },
+  { k: "Address change", d: "Always routed to a person", kind: "action", mode: "human", locked: true },
 ];
 const MODES = ["off", "human", "automated"];
 const MODE_LABEL = { off: "Off", human: "Human", automated: "Automated" };
@@ -574,18 +573,15 @@ const vendorCfg = { "Car Station Automotive Inc.": { autoReply: false } };  // o
 function renderConfig() {
   VIEW.innerHTML = `
     <div class="page-head">
-      <div class="page-title">Workflow Configuration</div>
-      <div class="page-desc">Configuration over code (the platform principle). Everything below is set per workflow (per tenant) — per-intent handling mode, confidence thresholds, entities, SLAs — with per-vendor overrides layered on top. “Automated” never overrides the gates: an automated intent at low confidence or failed identity still routes to a human.</div>
+      <div class="page-title">Configuration</div>
+      <div class="page-desc">Workflow and per-vendor settings.</div>
     </div>
     <div class="cfg-grid">
       <div class="card card-pad">
-        <div class="section-label">Per-intent handling mode <span class="sl-side">VQ-L3 · off / human / automated</span></div>
-        <div class="reply-stamp" style="margin:0 0 12px">
-          <strong>Off</strong> — not handled, falls through to a human · <strong>Human</strong> — always routed, even when the system could answer · <strong>Automated</strong> — auto-answer when the gates pass, otherwise route. Actions (bank-detail / address change) are locked to Human — they can never be automated (G0 / §6.1).
-        </div>
+        <div class="section-label">How each query type is handled <span class="sl-side">off · human · automated</span></div>
         ${CAPS.map((c,i) => `
           <div class="cfg-cap">
-            <div class="cc-info"><strong>${c.k} ${c.kind==='action'?'<span class="pill purple no-dot" style="margin-left:4px">action · locked human</span>':''}</strong><span>${c.d}</span></div>
+            <div class="cc-info"><strong>${c.k} ${c.kind==='action'?'<span class="pill purple no-dot" style="margin-left:4px">action</span>':''}</strong><span>${c.d}</span></div>
             <div class="modeseg" data-i="${i}">
               ${MODES.map(m => {
                 const active = c.mode === m;
@@ -597,37 +593,34 @@ function renderConfig() {
       </div>
       <div>
         <div class="card card-pad" style="margin-bottom:16px">
-          <div class="section-label">Per-vendor configuration <span class="sl-side">VQ-L2 · overrides the workflow default</span></div>
-          <div class="reply-stamp" style="margin:0 0 10px">Layered under the workflow config. The registry has thousands of vendors, so find one to tune it. Starts with auto-reply on/off; the list grows (language pin, SLA, allowed actions) without code changes.</div>
-          <div class="form-row" style="margin-bottom:12px">${vendorPickerHtml("vp-cfg", "Search a vendor to configure…")}</div>
+          <div class="section-label">Per-vendor settings</div>
+          <div class="form-row" style="margin:10px 0 12px">${vendorPickerHtml("vp-cfg", "Search a vendor to configure…")}</div>
           <div id="cfg-vendor-box">${cfgVendorBoxHtml()}</div>
           ${Object.keys(vendorCfg).length ? `<div class="reply-stamp" style="margin-top:10px">Overridden: ${Object.entries(vendorCfg).map(([n,c])=>`${n} (auto-reply ${c.autoReply===false?'off':'on'})`).join(' · ')}</div>` : ''}
         </div>
         <div class="card card-pad" style="margin-bottom:16px">
-          <div class="section-label">Confidence & accuracy targets <span class="sl-side">from the PRD §4</span></div>
-          <div class="slider-row"><label>Auto-answer accuracy bar (§4.3)</label><span class="pill green no-dot" style="min-width:auto">95%+ · QA-held</span></div>
-          <div class="slider-row"><label>Routing confidence → human triage (§4.2 / VQ-M4)</label><span class="pill blue no-dot" style="min-width:auto">98%</span></div>
-          <div class="slider-row"><label>Coverage / ingestion target (§4.2)</label><span class="pill blue no-dot" style="min-width:auto">≥ 90%</span></div>
-          <div class="slider-row" style="border:none"><label>G2 · answerability / G4 · answer confidence</label><span class="pill yellow no-dot" style="min-width:auto">Set in Phase 0</span></div>
-          <div class="reply-stamp" style="margin-top:6px">Per the PRD, the G2/G4 gate starting values are an open question (§13.4) — tuned in Phase 0 against the real baseline. Below threshold the gate always routes to a human rather than guess.</div>
+          <div class="section-label">Accuracy & confidence targets</div>
+          <div class="slider-row"><label>Auto-answer accuracy</label><span class="pill green no-dot" style="min-width:auto">95%+</span></div>
+          <div class="slider-row"><label>Routing confidence</label><span class="pill blue no-dot" style="min-width:auto">98%</span></div>
+          <div class="slider-row" style="border:none"><label>Coverage</label><span class="pill blue no-dot" style="min-width:auto">≥ 90%</span></div>
         </div>
         <div class="card card-pad" style="margin-bottom:16px">
-          <div class="section-label">Legal entities <span class="sl-side">answer is always entity-scoped (Epic C)</span></div>
+          <div class="section-label">Legal entities <span class="sl-side">answers are entity-scoped</span></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">${ENTITIES.map(e=>`<span class="pill blue no-dot">${e.flag} ${e.code} · ${e.ccy}</span>`).join("")}</div>
         </div>
         <div class="card card-pad" style="margin-bottom:16px">
-          <div class="section-label">Reply language <span class="sl-side">Phase 1 · §3.2 / §11</span></div>
+          <div class="section-label">Reply language</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span class="pill green no-dot">🇬🇧 Replies: English</span>
-            <span style="font-size:12px;color:var(--muted)">Inbound accepted in any language; outbound is English-bound. Multi-language replies are a later phase.</span>
+            <span class="pill green no-dot">🇬🇧 English</span>
+            <span style="font-size:12px;color:var(--muted)">Inbound accepted in any language; replies are English.</span>
           </div>
         </div>
         <div class="card card-pad">
-          <div class="section-label">SLA targets by type · Channel</div>
+          <div class="section-label">SLA targets · channel</div>
           <div class="slider-row"><label>Auto-answer · first response</label><span class="slider-val" style="min-width:auto">&lt; 2 min</span></div>
           <div class="slider-row"><label>Routed · dispute</label><span class="slider-val" style="min-width:auto">8 hours</span></div>
           <div class="slider-row"><label>Routed · bank change</label><span class="slider-val" style="min-width:auto">24 hours</span></div>
-          <div class="slider-row" style="border:none"><label>Channel · Freshdesk (Zalora pattern)</label><span class="pill green no-dot" style="min-width:auto">Connected</span></div>
+          <div class="slider-row" style="border:none"><label>Channel · Freshdesk</label><span class="pill green no-dot" style="min-width:auto">Connected</span></div>
         </div>
       </div>
     </div>`;
@@ -641,14 +634,14 @@ function renderConfig() {
   wireCfgVendorBox();
 }
 function cfgVendorBoxHtml() {
-  if (!cfgVendor) return `<div class="cfg-empty">No vendor selected — search above to tune a specific vendor's behaviour.</div>`;
+  if (!cfgVendor) return `<div class="cfg-empty">Search above to configure a vendor.</div>`;
   const cfg = vendorCfg[cfgVendor.name] || { autoReply: true };
   return `
     <div class="cfg-cap" style="border-top:1px solid var(--grey-100);padding-top:14px">
       <div class="cc-info"><strong>${cfgVendor.name}</strong><span>${cfgVendor.entity ? entLabel(cfgVendor.entity) + ' · ' : ''}${cfgVendor.email || ''}</span></div>
       <div class="toggle vcfg-toggle ${cfg.autoReply !== false ? 'on' : ''}"></div>
     </div>
-    <div class="form-hint">Auto-reply to this vendor is <strong id="vcfg-state">${cfg.autoReply !== false ? 'on' : 'off — every query is routed to a human'}</strong>. Vendor settings override the workflow default; changes are audited (VQ-K1).</div>`;
+    <div class="form-hint">Auto-reply is <strong id="vcfg-state">${cfg.autoReply !== false ? 'on' : 'off — every query is routed to a person'}</strong> for this vendor.</div>`;
 }
 function wireCfgVendorBox() {
   const t = $(".vcfg-toggle");
@@ -657,7 +650,7 @@ function wireCfgVendorBox() {
     t.classList.toggle("on");
     const on = t.classList.contains("on");
     vendorCfg[cfgVendor.name] = { autoReply: on };
-    $("#vcfg-state").innerHTML = on ? "on" : "off — every query is routed to a human";
+    $("#vcfg-state").innerHTML = on ? "on" : "off — every query is routed to a person";
     toast(`Auto-reply ${on ? 'enabled' : 'disabled'} for ${cfgVendor.name}.`);
   });
 }
@@ -688,22 +681,22 @@ function renderVendorStorage() {
   VIEW.innerHTML = `
     <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end">
       <div>
-        <div class="page-title">Vendor storage <span class="tag" style="vertical-align:middle">Epic N</span></div>
-        <div class="page-desc">Documents live <strong>per vendor</strong> — WHT/TDS certificates, Faktur Pajak, and more that AP staff upload or pull from government portals. Once a document is on file and in date, a request for it is auto-answered (VQ-E4 → VQ-E3). <strong>Expired documents are never served</strong> (VQ-N2); every upload, edit, delete and read is audited (VQ-K1).</div>
+        <div class="page-title">Vendor storage</div>
+        <div class="page-desc">Documents on file, per vendor.</div>
       </div>
       <button class="btn btn-primary btn-sm" id="vs-upload">＋ Upload document</button>
     </div>
 
     <div class="metrics" style="margin-bottom:16px">
       <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Documents on file</div><div class="m-value">${total}</div><div class="m-sub">Across ${Object.keys(byVendor).length} vendors</div></div>
-      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Valid · servable</div><div class="m-value">${valid}</div><div class="m-sub">In date — auto-served when requested</div></div>
+      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Valid</div><div class="m-value">${valid}</div><div class="m-sub">Auto-served when requested</div></div>
       <div class="metric" style="--c:var(--yellow-500)"><div class="m-label">Expiring soon</div><div class="m-value">${expiring}</div><div class="m-sub">Refresh before they lapse</div></div>
-      <div class="metric" style="--c:var(--red-500)"><div class="m-label">Expired · blocked</div><div class="m-value">${expired}</div><div class="m-sub">Never served — request routes to a human</div></div>
+      <div class="metric" style="--c:var(--red-500)"><div class="m-label">Expired</div><div class="m-value">${expired}</div><div class="m-sub">Never served — routed to a person</div></div>
     </div>
 
     <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:12px;align-items:center">
       <div class="search" style="flex:1;max-width:420px"><span>🔍</span><input id="vs-search" placeholder="Search vendor by name…" value="${vsSearch}"/></div>
-      <span style="font-size:12px;color:var(--muted)">${vendorNames.length} vendor${vendorNames.length===1?'':'s'} shown · documents are always scoped to a vendor</span>
+      <span style="font-size:12px;color:var(--muted)">${vendorNames.length} vendor${vendorNames.length===1?'':'s'} shown</span>
     </div>
 
     <div id="vs-list">
@@ -733,10 +726,7 @@ function renderVendorStorage() {
     }).join("") : `<div class="card card-pad" style="text-align:center;color:var(--muted);padding:40px">No vendor matches “${vsSearch}”. <button class="btn btn-sm" id="vs-clear" style="margin-left:8px">Clear search</button></div>`}
     </div>
 
-    <div class="callout">
-      <h4>🗄️ How storage feeds answers</h4>
-      <p>When a vendor asks for their WHT/TDS certificate or Faktur Pajak, Context Assembly checks that vendor's storage. An <strong>on-file, in-date</strong> document is served automatically — the same look-up-and-send pattern as any document request. If it isn't on file (or has expired), the request routes to a human who pulls it from the government portal. Auto-fetch from the portal itself stays a later build.</p>
-    </div>`;
+`;
 
   $("#vs-upload").addEventListener("click", () => openUploadModal(null));
   $$(".vs-upload-v").forEach(b => b.addEventListener("click", () => openUploadModal(VENDORS.find(v => v.name === b.dataset.vendor) || { name: b.dataset.vendor })));
@@ -751,14 +741,14 @@ function openUploadModal(preVendor) {
   const typeOpts = STORAGE_TYPES.map(t => `<option value="${t.type}">${t.icon} ${t.type}</option>`).join("");
   modal({
     title: "Upload document",
-    subtitle: "Documents are always stored against a single vendor (Epic N).",
+    subtitle: "Stored against a single vendor.",
     primary: "Upload & store",
     body: `
       <div class="form-row">
         <label>Vendor ${preVendor ? '' : '· search the registry'}</label>
         ${preVendor ? `<div class="field-input" style="background:var(--grey-25)">${preVendor.name}${preVendor.entity ? ` · ${preVendor.entity.flag} ${preVendor.entity.code}` : ''}</div>`
           : vendorPickerHtml("vp-up", "Search vendor by name or email…")}
-        <div class="form-hint" id="vp-up-hint">${preVendor ? 'Pre-selected from the vendor row.' : 'The registry holds thousands of vendors — start typing to find one.'}</div>
+        <div class="form-hint" id="vp-up-hint">${preVendor ? 'Pre-selected from the vendor row.' : 'Start typing to find a vendor.'}</div>
       </div>
       <div class="form-grid2">
         <div class="form-row"><label>Document type</label><select id="up-type">${typeOpts}</select></div>
@@ -766,9 +756,9 @@ function openUploadModal(preVendor) {
       </div>
       <div class="form-grid2">
         <div class="form-row"><label>Valid until</label><input type="date" id="up-valid"/></div>
-        <div class="form-row"><label>File</label><div class="field-input" style="color:var(--muted)">📎 choose a file… (prototype)</div></div>
+        <div class="form-row"><label>File</label><div class="field-input" style="color:var(--muted)">📎 Choose a file…</div></div>
       </div>
-      <div class="form-hint">Validity/expiry and version are captured; an expired document is never used in an auto-answer (VQ-N2).</div>`,
+      <div class="form-hint">An expired document is never used to answer a query.</div>`,
     afterOpen: () => { if (!preVendor) wireVendorPicker("vp-up", v => { chosen = v; $("#vp-up-hint").textContent = `Selected: ${v.name} · ${v.entity.flag} ${v.entity.code}`; }); },
     onPrimary: () => {
       if (!chosen) { toast("Pick a vendor first — documents are stored per vendor.", "warn"); return false; }
@@ -781,7 +771,7 @@ function openUploadModal(preVendor) {
         validity: validRaw ? `Valid to ${new Date(validRaw).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}` : "Valid (no expiry set)",
         status: "valid", version: "v1", added: `${ME} · just now`, icon: st ? st.icon : "📄",
       });
-      toast(`${type} stored against ${chosen.name}. Audit entry written (VQ-K1).`);
+      toast(`${type} stored against ${chosen.name}.`);
       renderVendorStorage();
     },
   });
@@ -818,14 +808,14 @@ function renderIngestion() {
   VIEW.innerHTML = `
     <div class="page-head">
       <div class="page-title">Ingestion & routing</div>
-      <div class="page-desc"><strong>Every inbound message is routed to a workflow</strong> — there is no unrouted state. The receiving workflow then <strong>accepts or rejects</strong> it based on its own configuration (an intent switched off, a non-query, or a mis-route). Rejections land here to be <strong>re-routed to the correct workflow</strong> (vendor-query / invoice / both) or confirmed; anything that didn't parse is recovered into a query. Nothing is dropped (Epic M); decisions are audited (VQ-K1).</div>
+      <div class="page-desc">Re-route rejected messages and recover anything that didn't parse.</div>
     </div>
 
     <div class="metrics" style="margin-bottom:16px">
-      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Messages routed</div><div class="m-value">100%</div><div class="m-sub">Every inbound goes to a workflow — no unrouted state</div></div>
-      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Routing accuracy</div><div class="m-value">98.1%</div><div class="m-sub">Routed to the correct workflow(s) · target 98%</div></div>
-      <div class="metric" style="--c:var(--purple-500)"><div class="m-label">Workflow rejections</div><div class="m-value">${rejectOpen}</div><div class="m-sub">Rejected per config / mis-route — re-route or confirm</div></div>
-      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Parse failures</div><div class="m-value">${parseOpen}</div><div class="m-sub">Coverage ${S.coverage}% · recover into a query</div></div>
+      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Messages routed</div><div class="m-value">100%</div><div class="m-sub">No unrouted state</div></div>
+      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Routing accuracy</div><div class="m-value">98.1%</div><div class="m-sub">Routed to the right workflow</div></div>
+      <div class="metric" style="--c:var(--purple-500)"><div class="m-label">Rejections</div><div class="m-value">${rejectOpen}</div><div class="m-sub">Re-route or confirm</div></div>
+      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Parse failures</div><div class="m-value">${parseOpen}</div><div class="m-sub">Coverage ${S.coverage}%</div></div>
     </div>
 
     <div class="card">
@@ -833,7 +823,7 @@ function renderIngestion() {
         <div class="chips">
           ${groups.map(g => `<button class="chip ${ingFilter===g.key?'active '+(g.cls||'grey'):''}" data-ing="${g.key}">${g.label}<span class="chip-c">${g.n}</span></button>`).join("")}
         </div>
-        <span style="margin-left:auto;font-size:12px;color:var(--muted)">${ingFilter==='reject'?'The workflow rejected these — re-route to the right workflow (suggested is highlighted) or confirm':'Routed, but couldn’t be parsed — recover into a structured query'}</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--muted)">${ingFilter==='reject'?'Suggested workflow is highlighted':'Recover into a query'}</span>
       </div>
       <table class="tbl"><thead><tr>
         <th>Ref / Ticket</th><th>Sender</th><th>Subject</th><th>Routed to</th><th>${ingFilter==='reject'?'Rejected — why':'Why it didn’t parse'}</th><th>Action</th>
@@ -856,19 +846,19 @@ function renderIngestion() {
     const u = ingState.find(x => x.id === b.dataset.id);
     const tg = TRIAGE_TARGETS.find(t => t.key === b.dataset.target);
     u.resolved = `Re-routed → ${tg.label}`;
-    toast(`${u.id} re-routed to ${tg.label}. Audit entry written (VQ-K1).`);
+    toast(`${u.id} re-routed to ${tg.label}.`);
     renderIngestion();
   }));
   $$(".ing-dismiss").forEach(b => b.addEventListener("click", () => {
     const u = ingState.find(x => x.id === b.dataset.id);
     u.resolved = "Rejection confirmed";
-    toast(`${u.id} confirmed as a non-query. Logged for audit (VQ-K1).`);
+    toast(`${u.id} confirmed as a non-query.`);
     renderIngestion();
   }));
   $$(".ing-create").forEach(b => b.addEventListener("click", () => {
     const u = ingState.find(x => x.id === b.dataset.id);
     u.resolved = "Recovered → VQ-48" + (50 + ingState.indexOf(u));
-    toast(`${u.id} recovered into a query — now in the Queries dashboard.`);
+    toast(`${u.id} recovered into a query.`);
     renderIngestion();
   }));
   $$(".ing-raw").forEach(b => b.addEventListener("click", () => openRawModal(ingState.find(x => x.id === b.dataset.id))));
@@ -883,7 +873,7 @@ function openRawModal(u) {
     body: `
       <div class="email-bubble">
         <div class="eb-head"><div class="eb-from">${u.sender}</div><div class="eb-to">to: ap-vendors@zalora.com · via Freshdesk</div></div>
-        <div class="eb-body"><div class="eb-subject">${u.subject}</div><div style="color:var(--muted)">— raw body not shown in this prototype —</div></div>
+        <div class="eb-body"><div class="eb-subject">${u.subject}</div><div style="color:var(--muted)">— message body —</div></div>
       </div>
       <div class="form-hint" style="margin-top:12px">Reason flagged: ${u.reason}</div>`,
   });
@@ -893,7 +883,7 @@ function openRawModal(u) {
 let connState = null; // runtime copy so Connect/Disconnect persist within the session
 const ST = {
   connected:   { cls: "green",  label: "Connected" },
-  verifying:   { cls: "yellow", label: "Verifying (Phase 0)" },
+  verifying:   { cls: "yellow", label: "Verifying" },
   error:       { cls: "red",    label: "Error" },
   disconnected:{ cls: "grey",   label: "Not connected" },
 };
@@ -905,16 +895,16 @@ function renderIntegrations() {
     <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end">
       <div>
         <div class="page-title">Integrations</div>
-        <div class="page-desc">Connect the data Vendor Queries needs — set it all up here on the platform, no separate tooling. Each client's SAP differs, so the ERP layer sits behind a connector abstraction; payment-status answers are only enabled where a read path is live (PRD §10 / §11).</div>
+        <div class="page-desc">Channel, ERP and document connectors.</div>
       </div>
       <button class="btn btn-primary btn-sm" id="conn-new">＋ New connector</button>
     </div>
 
     <div class="metrics" style="margin-bottom:18px">
-      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Connectors live</div><div class="m-value">${okCount}/${connState.length}</div><div class="m-sub">Across channel, ERP & data sources</div></div>
-      <div class="metric" style="--c:var(--yellow-500)"><div class="m-label">In Phase 0 check</div><div class="m-value">${connState.filter(c=>c.status==='verifying').length}</div><div class="m-sub">Payment-doc / remittance read feasibility</div></div>
-      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Channel</div><div class="m-value" style="font-size:20px">Freshdesk</div><div class="m-sub">Reuses Zalora Phase 1 intake</div></div>
-      <div class="metric" style="--c:var(--purple-500)"><div class="m-label">Auth registry</div><div class="m-value" style="font-size:20px">ERP-seeded</div><div class="m-sub">4,512 vendor contacts synced</div></div>
+      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Connectors live</div><div class="m-value">${okCount}/${connState.length}</div><div class="m-sub">Channel, ERP & data sources</div></div>
+      <div class="metric" style="--c:var(--yellow-500)"><div class="m-label">Verifying</div><div class="m-value">${connState.filter(c=>c.status==='verifying').length}</div><div class="m-sub">Payment / remittance read</div></div>
+      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Channel</div><div class="m-value" style="font-size:20px">Freshdesk</div><div class="m-sub">Email intake & status sync</div></div>
+      <div class="metric" style="--c:var(--purple-500)"><div class="m-label">Verified contacts</div><div class="m-value" style="font-size:20px">4,512</div><div class="m-sub">Synced from the vendor master</div></div>
     </div>
 
     ${groups.map(g => `
@@ -927,7 +917,7 @@ function renderIntegrations() {
     e.stopPropagation();
     const i = +b.dataset.i, c = connState[i];
     if (c.status === "connected") { c.status = "disconnected"; c.last = "Disconnected just now"; toast(`${c.name} disconnected.`, "warn"); }
-    else if (c.status === "verifying") { c.status = "connected"; c.last = "Connected just now · Phase 0 passed"; toast(`${c.name} verified & connected.`); }
+    else if (c.status === "verifying") { c.status = "connected"; c.last = "Connected just now"; toast(`${c.name} verified & connected.`); }
     else { c.status = "connected"; c.last = "Connected just now"; toast(`${c.name} connected.`); }
     renderIntegrations();
   }));
@@ -935,7 +925,7 @@ function renderIntegrations() {
   $$(".conn-card .conn-cfg").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); openConnectorModal(connState[+b.dataset.i]); }));
   $("#conn-new")?.addEventListener("click", () => modal({
     title: "Add a connector",
-    subtitle: "The ERP layer sits behind a connector abstraction — each client's SAP/ERP plugs in here (§11).",
+    subtitle: "Connect another ERP or data source.",
     primary: "Continue",
     body: `
       <div class="form-row"><label>Connector type</label><select id="nc-type">
@@ -943,8 +933,8 @@ function renderIntegrations() {
         <option>Object store (S3)</option><option>Vendor master (IDoc)</option><option>Custom / other</option>
       </select></div>
       <div class="form-row"><label>Display name</label><input type="text" placeholder="e.g. SAP — Payment doc (APAC)"/></div>
-      <div class="form-hint">A new connector needs a route target + credentials; payment answers only switch on once a read path is verified in Phase 0.</div>`,
-    onPrimary: () => toast("Connector wizard would continue here (prototype)."),
+      <div class="form-hint">Payment answers switch on once a read path is verified.</div>`,
+    onPrimary: () => toast("Connector setup would continue here."),
   }));
 }
 function openConnectorModal(c) {
@@ -959,7 +949,7 @@ function openConnectorModal(c) {
         <div class="form-row"><label>Poll interval</label><select><option>Real-time (webhook)</option><option>1 min</option><option>5 min</option><option>15 min</option></select></div>
       </div>
       <div class="form-row"><label>Read scope</label><div class="field-input" style="color:var(--muted)">${c.desc}</div></div>
-      <div class="form-hint">Credentials are managed securely on the platform; this prototype doesn't store secrets.</div>`,
+      <div class="form-hint">Credentials are stored securely on the platform.</div>`,
     onPrimary: () => toast(`${c.name} settings saved.`),
   });
 }
@@ -983,29 +973,6 @@ function connCard(c, i) {
         <button class="btn btn-sm ${isOn?'':'btn-primary'} conn-connect" data-i="${i}" style="margin-left:auto">${isOn?'Disconnect':c.status==='verifying'?'Verify & connect':'Connect'}</button>
       </div>
     </div>`;
-}
-
-/* ─────────────────────────── GUIDED TOUR ─────────────────────────── */
-const TOUR = [
-  { view: "worklist", title: "1 · The big idea", body: "A shared routing service classifies each ticket reply to the right workflow(s); Vendor Queries then auto-answers the high-volume status checks and routes the hard ones — and every state-changing action — to a human with context pre-assembled. All behind a strict identity gate. Replies are English in Phase 1." },
-  { view: "worklist", title: "2 · The AP analyst", body: "Everything is here — auto-answered and human-routed alike. Click any query to open it: you'll see the vendor's email, the identity result, the assembled context, and the full processing trace. The vendor never logs in; your team works entirely on this platform." },
-  { view: "ingestion", title: "3 · Ingestion & routing", body: "The triage surface. Inbound that didn't parse, plus low-confidence or wrong routing decisions — re-route them to the right workflow (vendor-query / invoice / both). Nothing is ever dropped (VQ-M4)." },
-  { view: "storage", title: "4 · Vendor storage", body: "Per vendor, AP staff upload WHT/TDS certificates and Faktur Pajak. Once on file and in date, a request for one is auto-answered — expired documents are never served (Epic N)." },
-  { view: "analytics", title: "5 · The AP manager", body: "Containment is the north-star (target 40%), with three hard guardrails: zero unauthorized disclosures, zero auto-applied bank changes, and 100% audit coverage. Routing accuracy and driver analysis round it out." },
-];
-let tourStep = 0;
-function startTour() { tourStep = 0; showTour(); }
-function showTour() {
-  $(".tour-pop")?.remove();
-  const t = TOUR[tourStep];
-  render(t.view);
-  const pop = el(`<div class="tour-pop" style="right:28px;bottom:28px">
-      <h5>${t.title}</h5><p>${t.body}</p>
-      <div class="tour-nav"><span class="tour-step">${tourStep+1} / ${TOUR.length}</span>
-        <div class="tour-btns"><button class="tn-skip">Skip</button><button class="tn-next">${tourStep===TOUR.length-1?'Done':'Next ›'}</button></div></div></div>`);
-  document.body.appendChild(pop);
-  pop.querySelector(".tn-skip").addEventListener("click", () => pop.remove());
-  pop.querySelector(".tn-next").addEventListener("click", () => { if (tourStep === TOUR.length-1) pop.remove(); else { tourStep++; showTour(); } });
 }
 
 /* ─────────────────────────── BOOT ─────────────────────────── */
@@ -1048,7 +1015,7 @@ $("#acct-logout").addEventListener("click", () => { acctMenu.classList.add("hidd
 /* ─── workspace (workflow) dropdown — tenant stays static ─── */
 const WORKSPACES = [
   { name: "Vendor Queries", desc: "Vendor query automation", current: true },
-  { name: "Invoice Processing", desc: "P2P invoice capture → ERP posting" },
+  { name: "Invoice Processing", desc: "Invoice capture to ERP posting" },
   { name: "Cash Application", desc: "Bank reconciliation & settlement" },
   { name: "AR Forecast", desc: "Receivables forecasting" },
 ];
@@ -1067,7 +1034,7 @@ $("#ws-trigger")?.addEventListener("click", (e) => {
 });
 $$(".ws-opt", wsMenu).forEach(b => b.addEventListener("click", () => {
   wsMenu.classList.add("hidden");
-  if (!b.classList.contains("current")) toast(`Switching to "${b.dataset.ws}" isn't available in this prototype.`, "info");
+  if (!b.classList.contains("current")) toast(`Switching to "${b.dataset.ws}" isn't available yet.`, "info");
 }));
 document.addEventListener("click", (e) => { if (!wsMenu.contains(e.target) && e.target.id !== "ws-trigger") wsMenu.classList.add("hidden"); });
 
@@ -1108,7 +1075,7 @@ function logout() {
         <h2>Sign in to continue</h2>
         <p>Access is restricted to whitelisted users via Google SSO.</p>
         <button class="gbtn" id="signin-go">${GOOGLE_G}<span>Continue with Google</span></button>
-        <div class="signin-note">You've been signed out. Session ends after 30 days (Zalora Phase 1 auth model).</div>
+        <div class="signin-note">You've been signed out.</div>
       </div>
     </div>`);
   document.body.appendChild(screen);
@@ -1116,6 +1083,5 @@ function logout() {
 }
 
 $$(".sb-child").forEach(c => c.addEventListener("click", () => render(c.dataset.view)));
-$("#proto-tour").addEventListener("click", startTour);
 applyRoleAccess();    // role-based nav (defaults to Org admin)
 render("worklist");   // action dashboard is the default view

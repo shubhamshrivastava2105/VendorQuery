@@ -47,7 +47,7 @@ const PIPELINE = [
   { k: "M", icon: "🔀", c: "var(--primary-400)", title: "Routing service",
     desc: "Milestone 1 · the shared, workflow-agnostic layer that sits in front of everything. It classifies every new ticket and every new reply and routes it to the vendor-query workflow, the invoice-processing workflow, or both (multi-label). Low-confidence routing defaults to a human triage queue. Routing accuracy is held to a 98% target (Epic M)." },
   { k: "A", icon: "📥", c: "var(--primary-500)", title: "Intake",
-    desc: "Whatever the router sends to this workflow becomes a structured Query record — reusing the Zalora Freshdesk channel. One message can carry several questions, each a resolvable intent (VQ-A1.4). Whatever can't be parsed isn't dropped — it lands in the Ingestion log for review, which is what the Coverage metric measures." },
+    desc: "Whatever the router sends to this workflow becomes a structured Query record — reusing the Zalora Freshdesk channel. One message can carry several questions, each a resolvable intent. Whatever can't be parsed isn't dropped — it lands in the Ingestion log for review, which is what the Coverage metric measures." },
   { k: "B", icon: "🔐", c: "var(--primary-600)", title: "Identity & Authorization Gate",
     desc: "The anchor. The sender's email is matched against the platform-owned authorization registry (seeded from the ERP vendor master). No answer, document, or amount leaves the system without a passing auth_check. Absolute (G1)." },
   { k: "C", icon: "🧩", c: "var(--purple-500)", title: "Context Assembly",
@@ -109,11 +109,11 @@ const SCENARIOS = [
     tag: { label: "Payment status", cls: "blue" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4821 created · 1 intent · via Freshdesk FD-88230" },
-      { state: "ok",   k: "G1 · Identity passed", d: "ar.team@fujifilm-bi.com → authorised contact (auth_check #ac_91f2)" },
-      { state: "ok",   k: "G2 · Answerable", d: "Maps cleanly to payment-status — not a dispute" },
+      { state: "ok",   k: "Identity check passed", d: "ar.team@fujifilm-bi.com → authorised contact" },
+      { state: "ok",   k: "Answerable", d: "Maps cleanly to payment-status — not a dispute" },
       { state: "ok",   k: "Context assembled", d: "Entity SG · Posting ID 5100774120 · Payment doc 2000915338 · remittance found" },
-      { state: "ok",   k: "G3 · Data complete & live", d: "Payment ladder read: Posted → Due → Initiated → Cleared" },
-      { state: "ok",   k: "G4 · Confidence 0.97 — auto-answer", d: "Reconciles to payment doc · Freshdesk → Neoflo - Auto-resolved" },
+      { state: "ok",   k: "Data complete", d: "Payment ladder read: Posted → Due → Initiated → Cleared" },
+      { state: "ok",   k: "Confident — auto-answered", d: "Reconciles to payment doc · Freshdesk → Neoflo - Auto-resolved" },
     ],
     ladder: ladder("cleared"),
     answer: {
@@ -134,10 +134,10 @@ const SCENARIOS = [
     tag: { label: "Payment status · on hold", cls: "yellow" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4822 created · via Freshdesk FD-88229" },
-      { state: "ok",   k: "G1 · Identity passed", d: "finance@exclusive-networks.sg → authorised contact" },
-      { state: "ok",   k: "G2 · Answerable", d: "Payment-status request" },
+      { state: "ok",   k: "Identity check passed", d: "finance@exclusive-networks.sg → authorised contact" },
+      { state: "ok",   k: "Answerable", d: "Payment-status request" },
       { state: "info", k: "Context assembled", d: "Posting ID 5100774890 carries an invoice-level PAYMENT BLOCK" },
-      { state: "ok",   k: "G3 / G4 · Honest in-progress answer", d: "'Paid' is only stated at clearing — here we report the block honestly" },
+      { state: "ok",   k: "Honest in-progress answer", d: "'Paid' is only stated at clearing — here we report the block honestly" },
     ],
     ladder: ladder("blocked"),
     answer: {
@@ -158,16 +158,16 @@ const SCENARIOS = [
     tag: { label: "Document request", cls: "purple" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4823 created · via Freshdesk FD-88228" },
-      { state: "ok",   k: "G1 · Identity passed", d: "billing@ith-logistics.my → authorised contact" },
-      { state: "ok",   k: "G2 · Answerable", d: "Look-up-and-send pattern (VQ-E3)" },
+      { state: "ok",   k: "Identity check passed", d: "billing@ith-logistics.my → authorised contact" },
+      { state: "ok",   k: "Answerable", d: "Look-up-and-send pattern" },
       { state: "ok",   k: "Context assembled", d: "PO 5300-771 + payment proof (doc 2000910221) on file & in scope" },
-      { state: "ok",   k: "G4 · Documents in scope", d: "Both documents belong to the vendor's own records" },
+      { state: "ok",   k: "Documents in scope", d: "Both documents belong to the vendor's own records" },
     ],
     ladder: ladder("cleared"),
     answer: {
       lead: "Documents attached.",
       body: "Attached for invoice INV-2890 (MYR 22,400.00): <strong>PO-5300771.pdf</strong> and <strong>payment-proof-2000910221.pdf</strong>. Payment was made on 28 May 2026.",
-      stamp: "Documents released only after a passing identity check (auth_check #ac_77a1).",
+      stamp: "Documents released only after a passing identity check.",
     },
   },
   {
@@ -182,13 +182,13 @@ const SCENARIOS = [
     tag: { label: "Dispute → human", cls: "orange" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4824 created · via Freshdesk FD-88231" },
-      { state: "ok",   k: "G1 · Identity passed", d: "accounts@carstation.ph → authorised contact" },
-      { state: "fail", k: "G2 · Not auto-answerable", d: "Detected as a dispute — the system doesn't argue, it routes (VQ-H2)" },
-      { state: "info", k: "Cause pre-assembled", d: "Invoice PHP 632 vs goods-receipt PHP 579 — SAP paid against the GR" },
-      { state: "warn", k: "Routed to human", d: "Lands in the vendor-query queue · Freshdesk → Neoflo - Routed" },
+      { state: "ok",   k: "Identity check passed", d: "accounts@carstation.ph → authorised contact" },
+      { state: "fail", k: "Not auto-answerable", d: "Detected as a dispute — routed to a person" },
+      { state: "info", k: "Cause pre-assembled", d: "Invoice PHP 632 vs goods-receipt PHP 579 — paid against the goods-receipt" },
+      { state: "warn", k: "Routed to human", d: "Lands in the queue · Freshdesk → Neoflo - Routed" },
     ],
     route: {
-      reason: "Dispute: amount mismatch — invoice PHP 632.00 vs goods-receipt PHP 579.00. SAP paid against the GR value, so PHP 53.00 was short-paid by design, not in error (same GR-variance rule as P2P 3-way matching).",
+      reason: "Amount mismatch — invoiced PHP 632.00 vs goods-receipt PHP 579.00. Paid against the goods-receipt value, so PHP 53.00 was short-paid by design, not in error.",
       suggest: "Confirm the GR shortfall with procurement / receiving, then explain the GR-based payment to the vendor or raise a debit note if the GR was wrong.",
       draft: "Hi, thanks for flagging INV-2451. Our records show payment was made against the goods-receipt value of PHP 579.00 rather than the invoiced PHP 632.00. I'm confirming the receipt with our team and will come back to you with next steps shortly.",
     },
@@ -205,8 +205,8 @@ const SCENARIOS = [
     tag: { label: "Bank change · step-up", cls: "purple" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4825 created · via Freshdesk FD-88232" },
-      { state: "ok",   k: "G1 · Identity passed", d: "Sender is a known contact — but sensitive intent detected" },
-      { state: "warn", k: "Sensitive intent · step-up required", d: "Bank-detail change → out-of-band verification (VQ-B3)" },
+      { state: "ok",   k: "Identity check passed", d: "Sender is a known contact — but sensitive intent detected" },
+      { state: "warn", k: "Sensitive intent · step-up required", d: "Bank-detail change → phone verification required" },
       { state: "info", k: "Captured to query record", d: "New details stored for review — NO write path to vendor master exists in v0" },
       { state: "warn", k: "Routed for human verification", d: "Freshdesk → Neoflo - Awaiting verification" },
     ],
@@ -214,7 +214,7 @@ const SCENARIOS = [
       requested: "Maybank · 5141-•••-2290",
       current: "CIMB · 8001-•••-7741",
       stepup: "Call-back to the phone number on the vendor master (+60 3-•••-8842) — never a number supplied in this email.",
-      note: "Bank-detail changes are captured & routed only. Zero are auto-applied in v0 — the identity gate plus out-of-band step-up carry the fraud defence (Epic I).",
+      note: "Bank-detail changes are captured and routed only — never applied automatically. The identity check plus phone verification carry the fraud defence.",
     },
   },
   {
@@ -229,14 +229,14 @@ const SCENARIOS = [
     tag: { label: "Auth failed", cls: "red" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4826 created · via Freshdesk FD-88233" },
-      { state: "fail", k: "G1 · Identity FAILED", d: "payments-update@fujifilm-billing.net is NOT in the authorization registry" },
+      { state: "fail", k: "Identity check failed", d: "payments-update@fujifilm-billing.net is not a verified contact" },
       { state: "fail", k: "Disclosure blocked", d: "Domain mimics a real vendor (…-billing.net vs …-bi.com) — nothing revealed" },
       { state: "warn", k: "Safe non-disclosing reply + logged", d: "Attempt logged with reason · Freshdesk → Neoflo - On Hold (identity)" },
     ],
     answer: {
       lead: "Identity could not be verified.",
       body: "We can't share any payment or account details until we've verified your identity. If you're an authorised contact, please reach us from your registered company email or contact your usual AP representative.",
-      stamp: "No financial data is ever included in a failed-auth reply (VQ-B4). Attempt logged for review.",
+      stamp: "No financial data is included in a failed-identity reply. Attempt logged for review.",
     },
   },
   {
@@ -250,18 +250,18 @@ const SCENARIOS = [
     intents: ["Payment status", "Document request", "Tax certificate"], outcome: "auto", multi: true, qstate: "auto",
     tag: { label: "Multi-intent · 2 auto + 1 routed", cls: "green" },
     run: [
-      { state: "ok",   k: "Intake · 3 intents", d: "One message (inbound: Bahasa Indonesia) → three resolvable intents (VQ-A1.4) · via Freshdesk FD-88210" },
-      { state: "ok",   k: "G1 · Identity passed", d: "ar@fjdigital.co.id → authorised contact" },
+      { state: "ok",   k: "Intake · 3 intents", d: "One message (inbound: Bahasa Indonesia) → three resolvable intents · via Freshdesk FD-88210" },
+      { state: "ok",   k: "Identity check passed", d: "ar@fjdigital.co.id → authorised contact" },
       { state: "ok",   k: "Intent 1 · Payment status", d: "INV-5567 cleared → auto-answered" },
       { state: "ok",   k: "Intent 2 · Document request", d: "Payment proof for INV-5512 on file → auto-answered" },
-      { state: "warn", k: "Intent 3 · Tax certificate", d: "No in-date PPh certificate on file in vendor storage → routed to a human to pull from the portal (VQ-E4); on-file certs auto-serve" },
-      { state: "info", k: "One consolidated reply · English", d: "Answerable intents sent now; routed intent acknowledged — never held back (VQ-J4)" },
+      { state: "warn", k: "Intent 3 · Tax certificate", d: "No in-date PPh certificate on file in vendor storage → routed to a person to pull from the portal" },
+      { state: "info", k: "One consolidated reply · English", d: "Answerable intents sent now; routed intent acknowledged — never held back" },
     ],
     ladder: ladder("cleared"),
     answer: {
       lead: "2 of 3 answered now; 1 with our team.",
       body: "<strong>1) INV-5567</strong> — paid on 5 June 2026, ref TXN-55901.<br><strong>2) Payment proof for INV-5512</strong> — attached (payment-proof-2000905910.pdf).<br><strong>3) Q1 PPh certificate</strong> — it isn't on file yet, so our team is retrieving it; you'll hear back within SLA.",
-      stamp: "Reply is in English (Phase 1) even though the question arrived in Bahasa Indonesia. One outbound email, not three (VQ-J4). An on-file certificate would have been served automatically from vendor storage (Epic N).",
+      stamp: "Reply is in English even though the question arrived in Bahasa Indonesia. One email, not three. An on-file certificate would have been served automatically from vendor storage.",
     },
   },
   {
@@ -276,16 +276,16 @@ const SCENARIOS = [
     tag: { label: "Invoice receipt", cls: "blue" },
     run: [
       { state: "ok",   k: "Intake", d: "Structured Query VQ-4818 created · via Freshdesk FD-88224" },
-      { state: "ok",   k: "G1 · Identity passed", d: "ar@pos.com.my → authorised contact" },
-      { state: "ok",   k: "G0/G2 · Query, answerable", d: "Invoice-receipt status (VQ-E5) — resolve via lookup cascade" },
-      { state: "ok",   k: "Cascade · invoice-processing workflow", d: "INV-7741 found in the P2P workflow — intake state: received, in processing (matched to PO)" },
-      { state: "ok",   k: "G4 · Known/positive state — auto-answer", d: "A found invoice is answered with its current state; a 'no record' conclusion would route instead" },
+      { state: "ok",   k: "Identity check passed", d: "ar@pos.com.my → authorised contact" },
+      { state: "ok",   k: "Query — answerable", d: "Resolve via lookup cascade" },
+      { state: "ok",   k: "Found in invoice workflow", d: "INV-7741 found — received, in processing (matched to PO)" },
+      { state: "ok",   k: "Known state — auto-answered", d: "A found invoice is answered with its current state; a 'no record' conclusion would route instead" },
     ],
     ladder: ladder("posted"),
     answer: {
       lead: "Received — in processing.",
       body: "We received invoice INV-7741 (MYR 4,180.00) on 2 June 2026. It's <strong>currently in processing</strong> (matched to your PO and posted as a payable); it isn't yet due for payment. We'll keep you updated as it moves toward a payment run.",
-      stamp: "Resolved from the invoice-processing workflow's intake state · as of the last sync on 11 Jun 2026, 08:15 SGT. We never auto-send a bare 'no record' — an unresolved case routes to a human (VQ-E5).",
+      stamp: "Resolved from the invoice-processing workflow · as of the last sync on 11 Jun 2026, 08:15 SGT. We never auto-send a bare 'no record' — an unresolved case routes to a person.",
     },
   },
 ];
@@ -421,50 +421,50 @@ const UNPARSED = [
 // ── Integrations / Connector Studio (PRD §10 data dependencies) ──
 // status: connected | verifying | error | disconnected
 const CONNECTORS = [
-  { group: "Routing & channel", name: "Routing service", desc: "Milestone 1 · classifies every ticket & reply → vendor-query / invoice / both (Epic M)",
-    protocol: "Internal · multi-label", status: "connected", last: "Routing accuracy: 98.1% on the labelled set", icon: "🔀" },
-  { group: "Routing & channel", name: "Freshdesk", desc: "Vendor email intake + ticket status sync (Zalora pattern)",
+  { group: "Routing & channel", name: "Routing service", desc: "Classifies every ticket and reply to the right workflow(s)",
+    protocol: "Internal", status: "connected", last: "Routing accuracy: 98.1%", icon: "🔀" },
+  { group: "Routing & channel", name: "Freshdesk", desc: "Vendor email intake and ticket status sync",
     protocol: "Webhook + REST poll", status: "connected", last: "Last sync: 2 min ago", icon: "📨" },
 
-  { group: "ERP / SAP", name: "SAP — Invoice & clearing status", desc: "Live invoice stage + clearing status (payment ladder VQ-E1)",
+  { group: "ERP / SAP", name: "SAP — Invoice & clearing status", desc: "Live invoice stage and clearing status",
     protocol: "RFC / BAPI", status: "connected", last: "Last read: 5 min ago", icon: "🧾" },
-  { group: "ERP / SAP", name: "SAP — Payment doc + remittance", desc: "Payment date, ref, deductions for breakdown (VQ-E2)",
-    protocol: "RFC / BAPI", status: "verifying", last: "Phase 0 feasibility check in progress", icon: "💳" },
-  { group: "ERP / SAP", name: "Zoho Books (ERP)", desc: "Bill & payment data for Zoho-based clients — Phase 1, alongside SAP",
-    protocol: "REST API", status: "verifying", last: "Phase 0 · mapping bill states to the VQ-E1 ladder", icon: "📚" },
-  { group: "ERP / SAP", name: "ERP Vendor Master", desc: "Seeds the platform authorization registry (Epic B)",
+  { group: "ERP / SAP", name: "SAP — Payment doc + remittance", desc: "Payment date, reference and deductions",
+    protocol: "RFC / BAPI", status: "verifying", last: "Feasibility check in progress", icon: "💳" },
+  { group: "ERP / SAP", name: "Zoho Books (ERP)", desc: "Bill and payment data for Zoho-based clients",
+    protocol: "REST API", status: "verifying", last: "Mapping bill states", icon: "📚" },
+  { group: "ERP / SAP", name: "ERP Vendor Master", desc: "Seeds the platform's verified-contact registry",
     protocol: "RFC / IDoc", status: "connected", last: "Last sync: 1 hr ago · 4,512 contacts", icon: "🏢" },
 
-  { group: "Data sources", name: "Document store", desc: "Invoice PDFs, PO, payment proof (VQ-E3) — reuses P2P object storage",
+  { group: "Data sources", name: "Document store", desc: "Invoice PDFs, POs and payment proof",
     protocol: "S3 / object store", status: "connected", last: "Last read: 8 min ago", icon: "📁" },
-  { group: "Data sources", name: "Vendor-level storage", desc: "Per-vendor WHT/TDS certs & Faktur Pajak, served as answer context (Epic N)",
-    protocol: "Platform store", status: "connected", last: "Last read: 14 min ago · 38 documents on file", icon: "🗄️" },
-  { group: "Data sources", name: "Tax certificate portal", desc: "Auto-fetch WHT/TDS certs from the govt portal — a later build; on-file certs serve from vendor storage",
-    protocol: "Gov. portal", status: "disconnected", last: "Manual fetch in v0 · source per country = open", icon: "🪪" },
+  { group: "Data sources", name: "Vendor storage", desc: "Per-vendor WHT/TDS certificates and Faktur Pajak",
+    protocol: "Platform store", status: "connected", last: "Last read: 14 min ago · 38 documents", icon: "🗄️" },
+  { group: "Data sources", name: "Tax certificate portal", desc: "Government-portal fetch — on-file certificates serve from vendor storage",
+    protocol: "Gov. portal", status: "disconnected", last: "Manual fetch for now", icon: "🪪" },
 ];
 
-// ── Analytics (PRD §4) — provisional, illustrative ──
+// ── Analytics ──
 const ANALYTICS = {
   metrics: [
-    { label: "Containment rate", value: "44.2%", delta: "+4.1", up: true, sub: "Resolved with no human · Phase 1 target 40% (validated in Phase 0)", c: "var(--green-500)" },
-    { label: "Auto-answer accuracy", value: "96.2%", delta: "+0.8", up: true, sub: "QA sample + behavioral signals · 95%+ bar (§4.4)", c: "var(--primary-500)" },
-    { label: "Routing accuracy", value: "98.1%", delta: "+0.6", up: true, sub: "Replies routed to the right workflow(s) · target 98% (Epic M)", c: "var(--purple-500)" },
-    { label: "Coverage / ingestion", value: "93.0%", delta: "+1.4", up: true, sub: "Inbound messages parsed into a structured query · target ≥ 90%", c: "var(--orange-500)" },
+    { label: "Containment rate", value: "44.2%", delta: "+4.1", up: true, sub: "Resolved with no human · target 40%", c: "var(--green-500)" },
+    { label: "Auto-answer accuracy", value: "96.2%", delta: "+0.8", up: true, sub: "Target 95%+", c: "var(--primary-500)" },
+    { label: "Routing accuracy", value: "98.1%", delta: "+0.6", up: true, sub: "Routed to the right workflow · target 98%", c: "var(--purple-500)" },
+    { label: "Coverage / ingestion", value: "93.0%", delta: "+1.4", up: true, sub: "Parsed into a query · target ≥ 90%", c: "var(--orange-500)" },
   ],
-  // Routing service multi-label split (Epic M / Milestone 1)
+  // Where replies route
   routing: [
     { label: "Vendor-query workflow", pct: 58, c: "var(--primary-500)" },
     { label: "Invoice-processing workflow", pct: 27, c: "var(--green-500)" },
-    { label: "Both (multi-label)", pct: 12, c: "var(--purple-500)" },
-    { label: "Human triage (low-confidence)", pct: 3, c: "var(--grey-500)" },
+    { label: "Both", pct: 12, c: "var(--purple-500)" },
+    { label: "Human triage", pct: 3, c: "var(--grey-500)" },
   ],
   byType: [
     { label: "Payment status", pct: 86, c: "var(--primary-500)" },
     { label: "Document request", pct: 81, c: "var(--purple-500)" },
-    { label: "Invoice receipt (VQ-E5)", pct: 72, c: "var(--primary-400)" },
+    { label: "Invoice receipt", pct: 72, c: "var(--primary-400)" },
     { label: "Payment breakdown", pct: 64, c: "var(--green-500)" },
-    { label: "Tax certificate (on file, Epic N)", pct: 47, c: "var(--yellow-500)" },
-    { label: "Statement recon. (stretch)", pct: 38, c: "var(--grey-500)" },
+    { label: "Tax certificate", pct: 47, c: "var(--yellow-500)" },
+    { label: "Statement reconciliation", pct: 38, c: "var(--grey-500)" },
     { label: "Dispute / short-pay", pct: 0, c: "var(--red-500)" },
   ],
   mix: [
