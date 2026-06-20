@@ -312,7 +312,7 @@ function openAssignModal(q) {
   const opts = TEAM.map(m => `<option value="${m.name}">${m.name} — ${m.role}${m.you ? ' (you)' : ''}</option>`).join("");
   modal({
     title: "Assign on the platform",
-    subtitle: "Not assigned on the Freshdesk ticket — assign it here (org/workspace admin or lead). VQ-H3.",
+    subtitle: "Not assigned on the Freshdesk ticket — assign it here (org/workspace admin). VQ-H3.",
     primary: "Assign",
     body: `
       <div class="form-row"><label>Assign to</label><select id="asg-who">${opts}</select></div>
@@ -419,7 +419,7 @@ function openDetailById(id) {
       </div>
 
       ${isHuman && unassigned ? `<div class="dt-banner ${role.assignOthers?'blue':'grey'}" style="display:block">
-        🧑‍💼 <strong>Not assigned on the Freshdesk ticket.</strong> Assignment normally syncs from Freshdesk; when it hasn't, ${role.assignOthers ? 'you can assign it on the platform (you\'re an <strong>'+currentRole+'</strong>) — pick a team member or take it yourself.' : 'an <strong>org/workspace admin or lead</strong> assigns it on the platform. As an <strong>'+currentRole+'</strong> you can take it yourself, but not assign others.'} <span style="color:var(--muted)">VQ-H3 · assignment changes are audited.</span>
+        🧑‍💼 <strong>Not assigned on the Freshdesk ticket.</strong> Assignment normally syncs from Freshdesk; when it hasn't, ${role.assignOthers ? 'you can assign it on the platform (you\'re an <strong>'+currentRole+'</strong>) — pick a team member or take it yourself.' : 'an <strong>org/workspace admin</strong> assigns it on the platform. As an <strong>'+currentRole+'</strong> you can take it yourself, but not assign others.'} <span style="color:var(--muted)">VQ-H3 · assignment changes are audited.</span>
       </div>` : ''}
 
       <div class="card card-pad">

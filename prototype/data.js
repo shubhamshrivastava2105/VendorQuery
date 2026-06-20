@@ -577,7 +577,7 @@ const TRIAGE_TARGETS = [
 // ── Roles & access (user-management PRD / VQ-H3) ──
 // The experience is role-based and switchable from the top bar. Each role grants access to a set
 // of views and platform actions. Assignment normally syncs from the Freshdesk ticket; when a routed
-// query is NOT assigned in Freshdesk, an org/workspace admin (or lead) assigns it on the platform.
+// query is NOT assigned in Freshdesk, an org/workspace admin assigns it on the platform.
 //   views       : nav items this role can open
 //   assignOthers: can assign a query to any team member on the platform (else self-assign only)
 //   configure   : can edit Configuration & Integrations
@@ -585,18 +585,17 @@ const ALL_VIEWS = ["worklist", "ingestion", "storage", "analytics", "integration
 const ROLES = [
   { key: "Org admin",       views: ALL_VIEWS, assignOthers: true,  configure: true,  desc: "Full access across the org — workspaces, users, integrations, config" },
   { key: "Workspace admin", views: ALL_VIEWS, assignOthers: true,  configure: true,  desc: "Full access within this workspace, including config & integrations" },
-  { key: "AP lead",         views: ["worklist", "ingestion", "storage", "analytics"], assignOthers: true,  configure: false, desc: "Triage & routing, assign work to the team, view analytics" },
-  { key: "AP handler",      views: ["worklist", "storage"], assignOthers: false, configure: false, desc: "Handle assigned queries & vendor storage; self-assign only" },
+  { key: "AP analyst",      views: ["worklist", "ingestion", "storage", "analytics"], assignOthers: false, configure: false, desc: "Handle queries, triage & routing, vendor storage; self-assign only" },
 ];
 const roleDef = (key) => ROLES.find(r => r.key === key) || ROLES[0];
 
-// Platform team (who an admin/lead can assign work to)
+// Platform team (who an admin can assign work to)
 const TEAM = [
   { name: "Shubham S.", role: "Org admin", you: true },
   { name: "Priya N.",   role: "Workspace admin" },
-  { name: "Daniel W.",  role: "AP lead" },
-  { name: "Aisha R.",   role: "AP handler" },
-  { name: "Marcus T.",  role: "AP handler" },
+  { name: "Daniel W.",  role: "AP analyst" },
+  { name: "Aisha R.",   role: "AP analyst" },
+  { name: "Marcus T.",  role: "AP analyst" },
 ];
 
 // Document types available in vendor storage (extensible by config — VQ-N3)
