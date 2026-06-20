@@ -6,11 +6,21 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
 
 const VIEW = $("#view");
-const CRUMB = { how: "How it works", inbox: "Vendor Inbox", worklist: "Queries", ingestion: "Ingestion log", analytics: "Analytics", integrations: "Integrations", config: "Configuration" };
+const CRUMB = { worklist: "Queries", ingestion: "Ingestion & routing", storage: "Vendor storage", analytics: "Analytics", integrations: "Integrations", config: "Configuration" };
 let currentView = "worklist";
 const ME = "Shubham S.";   // the signed-in AP user (matches sidebar footer)
+let currentRole = "Org admin";   // role-based view — switchable from the top bar (user-management PRD)
 // re-render whatever view is behind the slide-over so data changes show on "back"
 function refreshBackground() { if (currentView === "worklist") renderWorklist(); }
+
+/* ─── role-based access (user-management PRD / VQ-H3) ─── */
+function applyRoleAccess() {
+  const r = roleDef(currentRole);
+  $$(".sb-child").forEach(a => { a.style.display = r.views.includes(a.dataset.view) ? "" : "none"; });
+  const lbl = $("#role-label"); if (lbl) lbl.textContent = currentRole;
+  const ur = $(".sb-user-role"); if (ur) ur.textContent = "Vendor Queries · " + currentRole;
+  if (!r.views.includes(currentView)) render("worklist");
+}
 
 /* ─── toast ─── */
 function toast(msg, kind = "ok") {
@@ -25,15 +35,74 @@ const entLabel = (e) => e ? `${e.flag} ${e.code} · ${e.name}` : "— entity unr
 const entShort = (e) => e ? `${e.flag} ${e.code}` : "⚠️ —";
 const pill = (cls, label, noDot) => `<span class="pill ${cls}${noDot?' no-dot':''}">${label}</span>`;
 
+/* ─── modal ─── */
+function closeModal() { $("#modal-overlay")?.remove(); $("#modal-root")?.remove(); }
+function modal({ title, subtitle = "", body = "", primary = "Save", onPrimary = null, primaryClass = "btn-primary", wide = false, afterOpen = null }) {
+  closeModal();
+  const ov = el(`<div id="modal-overlay" class="overlay overlay-modal"></div>`);
+  const root = el(`
+    <div id="modal-root" class="modal ${wide ? 'modal-wide' : ''}">
+      <div class="modal-head">
+        <div><div class="modal-title">${title}</div>${subtitle ? `<div class="modal-sub">${subtitle}</div>` : ''}</div>
+        <button class="modal-x" id="modal-x" title="Close">✕</button>
+      </div>
+      <div class="modal-body">${body}</div>
+      <div class="modal-foot">
+        <button class="btn" id="modal-cancel">Cancel</button>
+        ${onPrimary ? `<button class="btn ${primaryClass}" id="modal-primary">${primary}</button>` : ''}
+      </div>
+    </div>`);
+  document.body.appendChild(ov); document.body.appendChild(root);
+  requestAnimationFrame(() => root.classList.add("show"));
+  ov.addEventListener("click", closeModal);
+  $("#modal-x").addEventListener("click", closeModal);
+  $("#modal-cancel").addEventListener("click", closeModal);
+  if (onPrimary) $("#modal-primary").addEventListener("click", () => { if (onPrimary(root) !== false) closeModal(); });
+  document.addEventListener("keydown", function esc(e){ if(e.key==="Escape"){ closeModal(); document.removeEventListener("keydown", esc); } });
+  if (afterOpen) afterOpen(root);
+  return root;
+}
+
+/* ─── searchable vendor picker (the registry has thousands — never a full list) ─── */
+function vendorPickerHtml(idp = "vp", placeholder = "Search vendor by name or email…") {
+  return `<div class="vpick" id="${idp}">
+    <span class="vpick-ico">🔍</span>
+    <input class="vpick-input" id="${idp}-input" placeholder="${placeholder}" autocomplete="off"/>
+    <div class="vpick-drop hidden" id="${idp}-drop"></div>
+  </div>`;
+}
+function wireVendorPicker(idp, onSelect) {
+  const input = $("#" + idp + "-input"), drop = $("#" + idp + "-drop");
+  if (!input) return;
+  const renderList = (term) => {
+    const t = term.trim().toLowerCase();
+    const res = (t ? VENDORS.filter(v => (v.name + " " + v.email).toLowerCase().includes(t)) : VENDORS).slice(0, 8);
+    drop.innerHTML = res.length
+      ? res.map(v => `<div class="vpick-opt" data-name="${v.name.replace(/"/g,'&quot;')}">
+          <div class="vpick-txt"><div class="vpick-n">${v.name}</div><div class="vpick-e">${v.email}</div></div>
+          <span class="vpick-ent">${v.entity.flag} ${v.entity.code}</span></div>`).join("")
+        + (VENDORS.length > res.length ? `<div class="vpick-more">Showing ${res.length} of ${VENDORS.length}+ — keep typing to narrow</div>` : "")
+      : `<div class="vpick-empty">No vendor matches “${term}”.</div>`;
+    drop.classList.remove("hidden");
+    $$(".vpick-opt", drop).forEach(o => o.addEventListener("click", () => {
+      const v = VENDORS.find(x => x.name === o.dataset.name);
+      input.value = v.name; drop.classList.add("hidden"); onSelect(v);
+    }));
+  };
+  input.addEventListener("focus", () => renderList(input.value));
+  input.addEventListener("input", () => renderList(input.value));
+}
+
 function setActiveNav(view) {
   $$(".sb-child").forEach(c => c.classList.toggle("active", c.dataset.view === view));
   $("#tb-sub").textContent = CRUMB[view] || "";
 }
 function render(view) {
+  if (!roleDef(currentRole).views.includes(view)) view = "worklist";
   currentView = view;
   setActiveNav(view);
   VIEW.scrollTop = 0;
-  ({ how: renderHow, inbox: renderInbox, worklist: renderWorklist, ingestion: renderIngestion, analytics: renderAnalytics, integrations: renderIntegrations, config: renderConfig }[view] || renderWorklist)();
+  ({ worklist: renderWorklist, ingestion: renderIngestion, storage: renderVendorStorage, analytics: renderAnalytics, integrations: renderIntegrations, config: renderConfig }[view] || renderWorklist)();
 }
 
 /* ─── payment ladder (VQ-E1) component ─── */
@@ -46,204 +115,15 @@ function ladderHtml(stages) {
     </div>`).join("")}</div>`;
 }
 
-/* ─────────────────────────── HOW IT WORKS ─────────────────────────── */
-function renderHow() {
-  VIEW.innerHTML = `
-    <div class="page-head">
-      <div class="page-title">How Vendor Queries works</div>
-      <div class="page-desc">A new workflow on the Neoflo platform that sits between a company's vendors and its accounts-payable team. It verifies who's asking, assembles the facts from the P2P invoice workflow + the ERP, and auto-answers the high-volume questions the system already knows — routing the genuinely hard ones to a human with the context pre-assembled and a suggested reply ready to send. Behind a strict identity gate, always.</div>
-    </div>
-
-    <div class="metrics" style="margin-bottom:20px">
-      <div class="metric" style="--c:var(--green-500)"><div class="m-label">~80% of questions</div><div class="m-value">“Has it<br>been paid?”</div><div class="m-sub">Auto-answered on receipt — no human trigger.</div></div>
-      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">The anchor</div><div class="m-value">Identity<br>gate</div><div class="m-sub">No answer leaves the system without a passing auth_check.</div></div>
-      <div class="metric" style="--c:var(--purple-500)"><div class="m-label">Grounded</div><div class="m-value">Live<br>data</div><div class="m-sub">Invoice status, payment, tax — via connectors in Integrations.</div></div>
-      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Hard ones</div><div class="m-value">Routed<br>with a draft</div><div class="m-sub">A summarized view + an editable suggested reply to send.</div></div>
-    </div>
-
-    <div class="card card-pad" style="margin-bottom:20px">
-      <div class="section-label">The workspace at a glance <span class="sl-side">click to open</span></div>
-      <div class="surface-grid">
-        ${[
-          ["worklist","📋","Queries","The action dashboard — every query, auto + human, filtered by outcome, entity or type. Human ones open a summarized view with an editable reply."],
-          ["ingestion","📥","Ingestion log","The inbound mail that didn't parse (the Coverage shortfall) — genuine misses recoverable into a query; noise logged for audit."],
-          ["analytics","📊","Analytics","Containment north-star, accuracy, automation by type, guardrails at zero, and driver analysis to feed the upstream roadmap."],
-          ["integrations","🔌","Integrations","Connect Freshdesk, SAP and the vendor master on-platform — the ERP connector seam each client plugs into."],
-          ["config","⚙️","Configuration","Configuration over code — capabilities on/off, confidence thresholds, entities, languages, SLAs."],
-          ["inbox","✉️","Vendor Inbox · demo","A simulator that plays a sample email through the pipeline step by step — for trust & onboarding, not daily use."],
-        ].map(([v,i,n,d]) => `<div class="surface-card" data-go="${v}"><div class="surface-ico">${i}</div><div><div class="surface-name">${n}</div><div class="surface-desc">${d}</div></div></div>`).join("")}
-      </div>
-    </div>
-
-    <div class="hiw-wrap">
-      <div class="card card-pad">
-        <div class="section-label">The processing pipeline <span class="sl-side">click any step · or watch it run</span></div>
-        <div class="pipe" id="pipe">
-          ${PIPELINE.map((s, i) => `
-            <div class="pipe-step" data-i="${i}" style="--c:${s.c}">
-              <div class="pipe-rail"><div class="pipe-node">${s.icon}</div>${i < PIPELINE.length-1 ? '<div class="pipe-line"></div>':''}</div>
-              <div class="pipe-body"><div class="pipe-k">Step ${s.k}</div><div class="pipe-title">${s.title}</div><div class="pipe-desc">${s.desc}</div></div>
-            </div>`).join("")}
-        </div>
-        <div style="margin-top:16px;display:flex;gap:10px">
-          <button class="btn btn-primary" id="hiw-run">▶ Animate the pipeline</button>
-          <button class="btn" data-go="worklist">Open the Queries dashboard ›</button>
-          <button class="btn btn-ghost" id="hiw-try">See the live demo ›</button>
-        </div>
-      </div>
-
-      <div class="hiw-side">
-        <div class="card card-pad gate-card">
-          <div class="section-label">The four resolution gates <span class="sl-side">§7.2 · mirrors P2P Smart Routing</span></div>
-          ${GATES.map(g => `<div class="gate-row"><div class="gate-k">${g.k}</div><div class="gate-t">${g.t}</div></div>`).join("")}
-        </div>
-        <div class="callout">
-          <h4>🛡️ G1 is absolute</h4>
-          <p>No answer, document, or amount leaves the system without a passing identity check recorded on the query. The single most important safety property of the product. Bank-detail changes are <strong>captured and routed, never auto-applied</strong>.</p>
-        </div>
-        <div class="card card-pad">
-          <div class="section-label">Built on what Zalora already runs</div>
-          <div class="reuse-row"><span class="reuse-ico">📨</span><div><strong>Freshdesk channel</strong><span>Same intake + ticket status sync as Zalora Phase 1 (Neoflo - …).</span></div></div>
-          <div class="reuse-row"><span class="reuse-ico">🔑</span><div><strong>Whitelist + Google SSO</strong><span>AP users onboarded once to the platform, maker-checker model.</span></div></div>
-          <div class="reuse-row"><span class="reuse-ico">🏢</span><div><strong>5 entities · 4 languages</strong><span>SG · MY · HK · ID · PH — English, Mandarin, Bahasa, Filipino.</span></div></div>
-          <div class="reuse-row" style="border:none"><span class="reuse-ico">🧾</span><div><strong>P2P invoice data</strong><span>Live status, Accounting Entry Posting ID, payment doc, WHT/VAT.</span></div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="spacer-20"></div>
-    <div class="card card-pad">
-      <div class="section-label">Freshdesk ticket status sync <span class="sl-side">reuses the Zalora Phase 1 "Neoflo - …" pattern</span></div>
-      <div class="sync-grid">
-        ${[
-          ["Auto-answered","Neoflo - Auto-resolved","green"],
-          ["Routed to human","Neoflo - Routed","orange"],
-          ["Bank-change captured","Neoflo - Awaiting verification","purple"],
-          ["Auth failed","Neoflo - On Hold (identity)","red"],
-          ["SLA breached","Neoflo - Routed (SLA breached)","red"],
-          ["Closed","Neoflo - Closed","grey"],
-        ].map(([a,b,c])=>`<div class="sync-row"><span class="pill ${c}">${a}</span><span class="sync-arrow">→</span><span class="mono sync-fd">${b}</span></div>`).join("")}
-      </div>
-    </div>`;
-
-  $$(".pipe-step").forEach(step => step.addEventListener("click", () => {
-    $$(".pipe-step").forEach(s => s.classList.remove("lit")); step.classList.add("lit");
-  }));
-  $("#hiw-run").addEventListener("click", animatePipe);
-  $("#hiw-try").addEventListener("click", () => render("inbox"));
-}
-function animatePipe() {
-  const steps = $$(".pipe-step");
-  steps.forEach(s => s.classList.remove("lit"));
-  steps.forEach((s, i) => setTimeout(() => s.classList.add("lit"), i * 420));
-}
-
-/* ─────────────────────────── VENDOR INBOX SIM ─────────────────────────── */
-let simIndex = 0;
-function renderInbox() {
-  VIEW.innerHTML = `
-    <div class="page-head">
-      <div class="page-title">Vendor Inbox <span class="tag" style="vertical-align:middle">live simulator</span></div>
-      <div class="page-desc">The vendor never logs in — their whole experience is the email they already send and the reply they get back. Processing is fully automatic: <strong>the moment a ticket arrives it runs through intake → identity gate → context → answer-or-route with no human trigger.</strong> Auto-answers reply on their own; only the genuinely hard ones wait for a person. Select any message to watch it arrive and resolve.</div>
-    </div>
-    <div class="sim-wrap">
-      <div class="mail-list" id="mail-list">
-        ${SCENARIOS.map((s, i) => `
-          <div class="mail-card ${i===simIndex?'active':''}" data-i="${i}">
-            <div class="mail-from"><strong>${s.vendor}</strong><span class="mail-flag">${s.flag}</span></div>
-            <div class="mail-email">${s.email}</div>
-            <div class="mail-subj">${s.subject}</div>
-            <div class="mail-meta">${pill(s.tag.cls, s.tag.label)}</div>
-          </div>`).join("")}
-      </div>
-      <div class="stage" id="stage"></div>
-    </div>`;
-  $$("#mail-list .mail-card").forEach(c => c.addEventListener("click", () => {
-    simIndex = +c.dataset.i;
-    $$("#mail-list .mail-card").forEach(x => x.classList.toggle("active", x === c));
-    renderStage();
-  }));
-  renderStage();
-}
-let runTimers = [];
-function renderStage() {
-  const s = SCENARIOS[simIndex];
-  $("#stage").innerHTML = `
-    <div class="stage-head">
-      <div><div class="sh-title">${s.subject}</div><div class="sh-sub">${s.vendor} · ${s.flag} ${s.lang} · ${entLabel(s.entity)}${s.entity?` · ${s.entity.ccy}`:''}</div></div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="live-tag" id="live-tag"><span class="live-dot"></span>Ticket received — processing automatically</span>
-        <button class="btn btn-sm" id="run-btn">↻ Replay</button>
-      </div>
-    </div>
-    <div class="stage-body">
-      <div class="email-bubble">
-        <div class="eb-head"><div class="eb-from">${s.vendor} &lt;${s.email}&gt;</div><div class="eb-to">to: ap-vendors@zalora.com · via Freshdesk · ${s.q}</div></div>
-        <div class="eb-body"><div class="eb-subject">${s.subject}</div>${s.body.replace(/\n/g,"<br>")}</div>
-      </div>
-      <div class="run-strip" id="run-strip"></div>
-      <div id="outcome-slot"></div>
-    </div>`;
-  $("#run-btn").addEventListener("click", () => runScenario(s));
-  runScenario(s); // auto-process on arrival — no human trigger
-}
-function runScenario(s) {
-  runTimers.forEach(clearTimeout); runTimers = [];
-  const strip = $("#run-strip"); strip.innerHTML = "";
-  $("#outcome-slot").innerHTML = "";
-  const live = $("#live-tag"); if (live) live.classList.remove("done");
-  s.run.forEach((step, i) => {
-    const node = el(`
-      <div class="run-step ${step.state}">
-        <div class="run-ico">${step.state==='ok'?'✓':step.state==='fail'?'✕':step.state==='warn'?'!':'◆'}</div>
-        <div class="run-txt"><div class="rt-k">${step.k}</div><div class="rt-d">${step.d}</div></div>
-        <div class="run-spin"></div>
-      </div>`);
-    strip.appendChild(node);
-    runTimers.push(setTimeout(() => { node.classList.add("show"); node.querySelector(".run-spin")?.remove(); }, 250 + i * 560));
-  });
-  runTimers.push(setTimeout(() => {
-    renderOutcome(s);
-    const live2 = $("#live-tag");
-    if (live2) {
-      live2.classList.add("done");
-      live2.innerHTML = s.outcome === "auto"
-        ? '<span class="live-dot"></span>Auto-replied — no human touched it'
-        : s.outcome === "authfail"
-        ? '<span class="live-dot"></span>Blocked — routed, nothing disclosed'
-        : '<span class="live-dot"></span>Routed to a human — context attached';
-    }
-  }, 250 + s.run.length * 560 + 250));
-}
-function renderOutcome(s) {
-  const slot = $("#outcome-slot");
-  let html = "";
-  const lad = s.ladder ? `<div class="ladder-wrap"><div class="ladder-k">Payment status ladder · “paid” is truthful only at clearing (VQ-E1)</div>${ladderHtml(s.ladder)}</div>` : "";
-  if (s.outcome === "auto") {
-    html = `<div class="outcome auto"><div class="outcome-head">✅ Auto-answered — no human touched it · Freshdesk → Neoflo - Auto-resolved</div>
-      <div class="outcome-body">${lad}
-        <div class="reply-box"><div class="rb-meta"><span>To: ${s.email}</span><span>·</span><span>Lang: ${s.lang}</span><span>·</span><span>auth_check ✓</span></div>
-        <div class="rb-answer"><strong>${s.answer.lead}</strong> ${s.answer.body}</div><div class="reply-stamp">⏱ ${s.answer.stamp}</div></div></div></div>`;
-  } else if (s.outcome === "authfail") {
-    html = `<div class="outcome authfail"><div class="outcome-head">⛔ Identity check failed — nothing disclosed · Freshdesk → Neoflo - On Hold (identity)</div>
-      <div class="outcome-body"><div class="reply-box"><div class="rb-meta"><span>To: ${s.email}</span><span>·</span><span>auth_check ✕</span></div>
-        <div class="rb-answer"><strong>${s.answer.lead}</strong> ${s.answer.body}</div><div class="reply-stamp">🔒 ${s.answer.stamp}</div></div></div></div>`;
-  } else if (s.outcome === "routed") {
-    html = `<div class="outcome routed"><div class="outcome-head">↗ Routed to a human — context bundle attached · Freshdesk → Neoflo - Routed</div>
-      <div class="outcome-body">
-        <div class="reason-box"><div class="rx-k">Why it routed</div><div class="rx-v">${s.route.reason}</div></div><div class="spacer-12"></div>
-        <div class="suggest-box"><div class="sx-k">Suggested next step</div><div class="sx-v">${s.route.suggest}</div></div><div class="spacer-16"></div>
-        <button class="btn btn-primary btn-sm" onclick="openDetailById('${s.q}')">Open in Query Worklist ›</button></div></div>`;
-  } else if (s.outcome === "captured") {
-    html = `<div class="outcome captured"><div class="outcome-head">🔏 Bank change captured — routed for human verification · Freshdesk → Neoflo - Awaiting verification</div>
-      <div class="outcome-body"><div class="bundle-grid">
-        <div class="bundle-item"><div class="bi-k">Requested (unverified)</div><div class="bi-v">${s.capture.requested}</div></div>
-        <div class="bundle-item"><div class="bi-k">Current on file</div><div class="bi-v">${s.capture.current}</div></div></div><div class="spacer-12"></div>
-        <div class="reason-box"><div class="rx-k">Step-up required (out-of-band)</div><div class="rx-v">${s.capture.stepup}</div></div><div class="spacer-12"></div>
-        <div class="reply-stamp" style="border:none;padding:0">🛡️ ${s.capture.note}</div></div></div>`;
-  }
-  slot.innerHTML = html;
-  requestAnimationFrame(() => $(".outcome", slot)?.classList.add("show"));
+/* ─── processing trace (used inside Query detail) ─── */
+// Renders the scenario's pipeline steps as a static vertical stepper.
+function processTraceHtml(sc) {
+  if (!sc || !sc.run) return "";
+  return `<div class="run-strip static">${sc.run.map(step => `
+    <div class="run-step ${step.state} show">
+      <div class="run-ico">${step.state==='ok'?'✓':step.state==='fail'?'✕':step.state==='warn'?'!':'◆'}</div>
+      <div class="run-txt"><div class="rt-k">${step.k}</div><div class="rt-d">${step.d}</div></div>
+    </div>`).join("")}</div>`;
 }
 
 /* ─────────────────────────── QUERIES — ACTION DASHBOARD (default) ─────────────────────────── */
@@ -263,6 +143,7 @@ function renderWorklist() {
   const auto = QUERIES.filter(q => !q.human).length;
   const human = QUERIES.filter(q => q.human && q.qstate !== "closed").length;
   const breaches = QUERIES.filter(q => q.qstate === "breached").length;
+  const navCount = $("#nav-open-count"); if (navCount) navCount.textContent = human;
   const counts = Object.fromEntries(OUTCOME_GROUPS.map(g => [g.key, g.key === "all" ? total : QUERIES.filter(q => groupOf(q.qstate) === g.key).length]));
   const types = [...new Set(QUERIES.map(q => q.type))];
   const rows = QUERIES.filter(wlMatch);
@@ -273,7 +154,7 @@ function renderWorklist() {
         <div class="page-title">Queries</div>
         <div class="page-desc">Every vendor query in one place — auto-answered and human-routed alike. Filter by outcome, entity or type. Auto-answered queries were contained with no human touch; the rest open a summarized view with a suggested reply you can edit and send.</div>
       </div>
-      <button class="btn btn-primary btn-sm" data-toast="Manual query intake would open here (rare — most arrive via Freshdesk).">＋ New manual query</button>
+      <button class="btn btn-primary btn-sm" id="wl-new">＋ New manual query</button>
     </div>
 
     <div class="metrics" style="margin-bottom:16px">
@@ -308,7 +189,7 @@ function renderWorklist() {
       </tr></thead><tbody>
       ${rows.length ? rows.map(q => `
         <tr data-id="${q.id}">
-          <td class="mono">${q.id}<div style="font-size:10.5px;color:var(--muted)">${q.ref} · ${q.ts}</div></td>
+          <td class="mono">${q.id}<div style="font-size:10.5px;color:var(--muted)">${q.ref}</div><div style="font-size:10.5px;color:var(--muted)">${q.ts}</div></td>
           <td class="vendor-cell"><strong>${q.vendor}</strong><span>${q.email}</span></td>
           <td>${entShort(q.entity)}</td>
           <td>${pill(TYPECLS[q.type]||'grey', q.type, true)}</td>
@@ -334,6 +215,39 @@ function renderWorklist() {
   $("#wl-clear")?.addEventListener("click", () => { wlFilter = { outcome: "all", entity: "all", type: "all", search: "" }; renderWorklist(); });
   $$("#view tbody tr[data-id]").forEach(tr => tr.addEventListener("click", () => openDetailById(tr.dataset.id)));
   $$("#view .row-action").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); openDetailById(b.dataset.id); }));
+  $("#wl-new")?.addEventListener("click", openNewQueryModal);
+}
+
+// Manual query intake (rare — most arrive via Freshdesk)
+function openNewQueryModal() {
+  let chosen = null;
+  const typeOpts = Object.keys(TYPECLS).filter(t => t !== "Unverified sender").map(t => `<option value="${t}">${t}</option>`).join("");
+  modal({
+    title: "New manual query",
+    subtitle: "Rare — most queries arrive via Freshdesk. Logged the same way and gated by identity.",
+    primary: "Create query",
+    body: `
+      <div class="form-row">
+        <label>Vendor · search the registry</label>
+        ${vendorPickerHtml("vp-nq", "Search vendor by name or email…")}
+        <div class="form-hint" id="vp-nq-hint">Identity is checked against this vendor's authorised contacts (Epic B).</div>
+      </div>
+      <div class="form-row"><label>Query type</label><select id="nq-type">${typeOpts}</select></div>
+      <div class="form-row"><label>What is the vendor asking?</label><textarea id="nq-msg" placeholder="e.g. Has invoice INV-2098 been paid?"></textarea></div>`,
+    afterOpen: () => wireVendorPicker("vp-nq", v => { chosen = v; $("#vp-nq-hint").textContent = `Selected: ${v.name} · ${v.entity.flag} ${v.entity.code}`; }),
+    onPrimary: () => {
+      if (!chosen) { toast("Pick a vendor first.", "warn"); return false; }
+      const type = $("#nq-type").value;
+      const id = "VQ-49" + (10 + Math.floor(QUERIES.length));
+      QUERIES.unshift({
+        id, ref: "MANUAL", vendor: chosen.name, email: chosen.email, entity: chosen.entity,
+        type, qstate: "routed", human: true, reason: `${type} · manual intake`,
+        sla: "8h 00m", slaState: "ok", assignee: "Unassigned", resolved: null, ts: "11 Jun · now", scenario: null,
+      });
+      toast(`Manual query ${id} created for ${chosen.name} — now in the queue.`);
+      renderWorklist();
+    },
+  });
 }
 
 /* ─────────────────────────── QUERY DETAIL ───────────────────────────
@@ -386,6 +300,27 @@ function humanPack(q, sc) {
   };
 }
 
+// Platform-side assignment (VQ-H3) — only when not assigned in Freshdesk
+function assignQueryTo(q, name) {
+  q.assignee = name;
+  q.assignSource = "platform";
+  toast(`Assigned to ${name === ME ? 'you' : name} on the platform. Change audited (VQ-K1).`);
+  refreshBackground();
+  openDetailById(q.id);
+}
+function openAssignModal(q) {
+  const opts = TEAM.map(m => `<option value="${m.name}">${m.name} — ${m.role}${m.you ? ' (you)' : ''}</option>`).join("");
+  modal({
+    title: "Assign on the platform",
+    subtitle: "Not assigned on the Freshdesk ticket — assign it here (org/workspace admin or lead). VQ-H3.",
+    primary: "Assign",
+    body: `
+      <div class="form-row"><label>Assign to</label><select id="asg-who">${opts}</select></div>
+      <div class="form-hint">Every routed query has exactly one accountable assignee; assignment changes are audit-logged (VQ-K1).</div>`,
+    onPrimary: () => assignQueryTo(q, $("#asg-who").value),
+  });
+}
+
 function openDetailById(id) {
   const q = QUERIES.find(w => w.id === id);
   if (!q) return;
@@ -395,6 +330,10 @@ function openDetailById(id) {
   const isClosed = q.qstate === "closed";
   const isHuman = q.human && !isClosed;     // needs a person to respond now
   const fd = FRESHDESK[q.qstate] || (isHuman ? "Neoflo - Routed" : "Neoflo - Auto-resolved");
+  // assignment source (Freshdesk-first, platform fallback) + role
+  const role = roleDef(currentRole);
+  const unassigned = q.assignee === "Unassigned";
+  const asgSource = unassigned ? "Not assigned in Freshdesk" : q.assignee === "Auto" ? "Auto-resolved" : q.assignSource === "platform" ? "Assigned on the platform" : "Assigned in Freshdesk";
 
   // banner
   let banner;
@@ -436,7 +375,7 @@ function openDetailById(id) {
         <div class="suggest-box"><div class="sx-k">💡 Suggested next step</div><div class="sx-v">${pack.suggestion}</div></div>
       </div>
       <div class="card card-pad">
-        <div class="dt-section-title">Suggested reply <span class="tag" style="margin-left:6px">editable · ${sc?sc.lang:'English'}</span></div>
+        <div class="dt-section-title">Suggested reply <span class="tag" style="margin-left:6px">editable · English (Phase 1)</span></div>
         <div class="reply-tools">
           <button class="btn btn-sm" id="rt-regen">↻ Regenerate</button>
           <button class="btn btn-sm" id="rt-reset">Reset to suggestion</button>
@@ -462,7 +401,7 @@ function openDetailById(id) {
       </div>
       <div class="dt-head-actions">
         ${isHuman ? `
-          ${q.assignee==='Unassigned'?'<button class="btn btn-sm" id="dt-assign">Assign to me</button>':''}
+          ${unassigned?`<button class="btn btn-sm" id="dt-assign">${role.assignOthers?'Assign…':'Assign to me'}</button>`:''}
           ${q.qstate==='captured'?`<button class="btn btn-sm dt-terminal" style="color:var(--red-600);border-color:var(--red-200)" data-msg="Bank change rejected. Vendor master unchanged." data-newstate="closed">Reject change</button><button class="btn btn-primary btn-sm dt-terminal" data-msg="Verified out-of-band & applied. Freshdesk → Neoflo - Closed." data-newstate="closed">✓ Verify & send</button>`
             : q.qstate==='authfail'?`<button class="btn btn-sm dt-terminal" style="color:var(--red-600);border-color:var(--red-200)" data-msg="Flagged as fraud. Attempt logged; no disclosure." data-newstate="closed">Flag as fraud</button><button class="btn btn-primary btn-sm dt-terminal" data-msg="Safe non-disclosing reply sent." data-newstate="closed">Send safe reply</button>`
             : `<button class="btn btn-primary btn-sm dt-terminal" data-msg="Reply sent. Freshdesk → Neoflo - Closed." data-newstate="closed">Send reply & close</button>`}`
@@ -476,8 +415,12 @@ function openDetailById(id) {
         <div class="metric" style="--c:${QSTATE[q.qstate].cls==='red'?'var(--red-500)':QSTATE[q.qstate].cls==='green'?'var(--green-500)':'var(--primary-500)'};flex:1.2;padding:13px 15px"><div class="m-label">Status</div><div style="margin-top:6px">${pill(QSTATE[q.qstate].cls, QSTATE[q.qstate].label)}</div></div>
         <div class="metric" style="--c:var(--purple-500);flex:1;padding:13px 15px"><div class="m-label">Type</div><div style="margin-top:6px">${pill(TYPECLS[q.type]||'grey', q.type, true)}</div></div>
         <div class="metric" style="--c:${q.slaState==='breach'?'var(--red-500)':'var(--green-500)'};flex:1;padding:13px 15px"><div class="m-label">${q.resolved?'Resolved in':'SLA'}</div><div class="m-value" style="font-size:17px;margin-top:4px">${q.resolved||q.sla}</div></div>
-        <div class="metric" style="--c:var(--grey-500);flex:1;padding:13px 15px"><div class="m-label">Assignee</div><div class="m-value" style="font-size:15px;margin-top:6px">${q.assignee==='Unassigned'?'—':q.assignee}</div></div>
+        <div class="metric" style="--c:var(--grey-500);flex:1;padding:13px 15px"><div class="m-label">Assignee</div><div class="m-value" style="font-size:15px;margin-top:6px">${unassigned?'—':q.assignee}</div><div style="font-size:10.5px;color:var(--muted);margin-top:2px">${asgSource}</div></div>
       </div>
+
+      ${isHuman && unassigned ? `<div class="dt-banner ${role.assignOthers?'blue':'grey'}" style="display:block">
+        🧑‍💼 <strong>Not assigned on the Freshdesk ticket.</strong> Assignment normally syncs from Freshdesk; when it hasn't, ${role.assignOthers ? 'you can assign it on the platform (you\'re an <strong>'+currentRole+'</strong>) — pick a team member or take it yourself.' : 'an <strong>org/workspace admin or lead</strong> assigns it on the platform. As an <strong>'+currentRole+'</strong> you can take it yourself, but not assign others.'} <span style="color:var(--muted)">VQ-H3 · assignment changes are audited.</span>
+      </div>` : ''}
 
       <div class="card card-pad">
         <div class="dt-section-title">Vendor's question</div>
@@ -498,11 +441,17 @@ function openDetailById(id) {
 
       ${core}
 
+      ${sc ? `<div class="card card-pad">
+        <div class="dt-section-title">How this query was processed <span class="tag" style="margin-left:6px">pipeline trace</span></div>
+        ${processTraceHtml(sc)}
+      </div>` : ''}
+
       <div class="card card-pad">
-        <div class="dt-section-title">Audit trail <span class="tag" style="margin-left:6px">immutable · Epic K</span></div>
-        <div class="audit-row"><span class="ar-t">${q.ts.split('· ')[1]||'08:15'}</span><span class="ar-d"><strong>Intake</strong> · email parsed into ${q.id}</span></div>
+        <div class="dt-section-title">Audit trail <span class="tag" style="margin-left:6px">immutable · 100% coverage · Epic K</span></div>
+        <div class="audit-row"><span class="ar-t">${q.ts.split('· ')[1]||'08:15'}</span><span class="ar-d"><strong>Routing decision</strong> · reply classified → vendor-query workflow${q.qstate==='captured'?' (action)':''} (Epic M)</span></div>
+        <div class="audit-row"><span class="ar-t">+0s</span><span class="ar-d"><strong>Intake</strong> · email parsed into ${q.id}</span></div>
         <div class="audit-row"><span class="ar-t">+1s</span><span class="ar-d"><strong>Identity gate</strong> · ${q.qstate==='authfail'?'auth_check FAILED — disclosure blocked':'auth_check passed'}</span></div>
-        <div class="audit-row"><span class="ar-t">+2s</span><span class="ar-d"><strong>Context assembled</strong> · records fetched from Neoflo (P2P) + ERP</span></div>
+        <div class="audit-row"><span class="ar-t">+2s</span><span class="ar-d"><strong>${q.qstate==='captured'?'G0 · Action — held for human':'Context assembled'}</strong> · ${q.qstate==='captured'?'state-changing request never auto-resolves':'records fetched from Neoflo (P2P) + ERP + vendor storage'}</span></div>
         <div class="audit-row"><span class="ar-t">+3s</span><span class="ar-d"><strong>${isAuto?'Auto-answered':isClosed?'Closed':'Routed'}</strong> · ${q.reason} · Freshdesk → ${fd}</span></div>
       </div>
     </div>
@@ -519,12 +468,10 @@ function openDetailById(id) {
   overlay.classList.remove("hidden");
   detail.classList.remove("hidden");
   $("#dt-close").addEventListener("click", closeDetail);
-  // Assign to me — mutate the query, refresh the panel AND the dashboard behind it
+  // Platform-side assignment (when not assigned in Freshdesk). Admins/leads can assign anyone.
   $("#dt-assign")?.addEventListener("click", () => {
-    q.assignee = ME;
-    toast(`Assigned to you (${ME}).`);
-    refreshBackground();      // dashboard now shows the assignee on "back"
-    openDetailById(q.id);     // re-render panel with the new assignee
+    if (role.assignOthers) openAssignModal(q);
+    else assignQueryTo(q, ME);
   });
   // Terminal actions — persist the new state in memory (until page refresh)
   $$(".dt-terminal", detail).forEach(b => b.addEventListener("click", () => {
@@ -556,7 +503,7 @@ function renderAnalytics() {
   VIEW.innerHTML = `
     <div class="page-head">
       <div class="page-title">Vendor Queries — Analytics</div>
-      <div class="page-desc">Manage by numbers. Containment is the north-star, watched alongside accuracy and the counter-metrics (re-ask, CSAT) so containment is never "won" by frustrating vendors. Targets are provisional — set against the Phase 0 baseline.</div>
+      <div class="page-desc">Manage by numbers. Containment is the north-star (Phase 1 target 40%), watched alongside auto-answer accuracy (95%+ bar), routing accuracy (98%) and the counter-metrics (re-ask, inferred satisfaction proxy) so containment is never "won" by frustrating vendors. Targets are validated against the Phase 0 baseline.</div>
     </div>
     <div class="metrics" style="margin-bottom:18px">
       ${A.metrics.map(m => { const drill = m.label.startsWith("Coverage"); return `
@@ -576,17 +523,28 @@ function renderAnalytics() {
           <div class="legend">${A.mix.map(m => `<div class="legend-item"><span class="legend-dot" style="background:${m.c}"></span>${m.label}<strong>${m.pct}%</strong></div>`).join("")}</div></div>
       </div>
     </div>
+    <div class="row" style="margin-bottom:16px;align-items:stretch">
+      <div class="card card-pad" style="flex:1">
+        <div class="section-label">Routing service <span class="sl-side">Epic M · Milestone 1 · multi-label</span></div>
+        <div class="bar-row"><div class="br-label" style="font-weight:600">Routing accuracy</div><div class="bar-track"><div class="bar-fill" style="width:98.1%;background:var(--purple-500)"></div></div><div class="br-val">98.1%</div></div>
+        <div class="reply-stamp" style="margin:6px 0 12px">Every new ticket and every new reply gets its own routing decision; a reply that is both an invoice and a query enters both workflows. Low-confidence routing defaults to a human triage queue, never dropped (VQ-M4).</div>
+        <div class="section-label">Where replies route <span class="sl-side">last 30 days</span></div>
+        ${A.routing.map(r => `<div class="bar-row"><div class="br-label">${r.label}</div><div class="bar-track"><div class="bar-fill" style="width:${r.pct}%;background:${r.c}"></div></div><div class="br-val">${r.pct}%</div></div>`).join("")}
+      </div>
+    </div>
     <div class="row" style="align-items:stretch">
       <div class="card card-pad" style="flex:1">
         <div class="section-label">Hard guardrails <span class="sl-side">non-negotiable · from day one</span></div>
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+        <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:12px">
           <div class="guardrail"><div class="g-ico">🔒</div><div class="g-txt"><strong>0</strong><span>Unauthorized disclosures</span></div></div>
           <div class="guardrail"><div class="g-ico">🏦</div><div class="g-txt"><strong>0</strong><span>Fraudulent bank changes applied</span></div></div>
+          <div class="guardrail"><div class="g-ico">📋</div><div class="g-txt"><strong>100%</strong><span>Audit coverage (every action)</span></div></div>
         </div>
         <div class="spacer-16"></div>
-        <div class="section-label">Counter-metrics</div>
+        <div class="section-label">Counter-metrics <span class="sl-side">satisfaction is inferred — email has no rating surface (§4.4)</span></div>
         <div class="bar-row"><div class="br-label">Vendor re-ask rate</div><div class="bar-track"><div class="bar-fill" style="width:6.4%;background:var(--green-500)"></div></div><div class="br-val">6.4%</div></div>
-        <div class="bar-row"><div class="br-label">Vendor CSAT</div><div class="bar-track"><div class="bar-fill" style="width:88%;background:var(--primary-500)"></div></div><div class="br-val">4.4★</div></div>
+        <div class="bar-row"><div class="br-label">Reply sentiment (positive)</div><div class="bar-track"><div class="bar-fill" style="width:82%;background:var(--primary-500)"></div></div><div class="br-val">82%</div></div>
+        <div class="bar-row"><div class="br-label">Dispute / reopen rate</div><div class="bar-track"><div class="bar-fill" style="width:4.1%;background:var(--orange-500)"></div></div><div class="br-val">4.1%</div></div>
       </div>
       <div class="card card-pad" style="flex:1">
         <div class="section-label">Driver analysis <span class="sl-side">what generates the most questions → feed P2P roadmap</span></div>
@@ -597,43 +555,71 @@ function renderAnalytics() {
 }
 
 /* ─────────────────────────── CONFIGURATION ─────────────────────────── */
+// Per-intent handling mode (VQ-L3): off | human | automated. Actions are locked to human (G0 / §6.1).
 const CAPS = [
-  { k: "Payment status", d: "The VQ-E1 ladder — the irreducible MVP floor", on: true, locked: true },
-  { k: "Payment breakdown (remittance)", d: "VQ-E2 — additive, needs readable remittance", on: true },
-  { k: "Document request", d: "VQ-E3 — PO / invoice / payment proof", on: true },
-  { k: "Tax certificate", d: "VQ-E4 — manual in v0 (govt portal); always routes", on: false, locked: true },
-  { k: "Tax-rate explanation", d: "Stretch — rule-based; escalate if it doesn't reconcile", on: false },
-  { k: "Statement reconciliation", d: "Stretch — depends on stage/reason data access", on: false },
-  { k: "Bank-detail change", d: "Capture & route only — never auto-applied", on: true, locked: true },
+  { k: "Payment status", d: "VQ-E1 ladder — the anchor; “paid” only at clearing", kind: "query", mode: "automated", locked: true },
+  { k: "Payment breakdown (remittance)", d: "VQ-E2 — needs readable remittance (Phase 0 gate)", kind: "query", mode: "automated" },
+  { k: "Document request", d: "VQ-E3 — PO / invoice copy / payment proof", kind: "query", mode: "automated" },
+  { k: "Invoice receipt", d: "VQ-E5 — lookup cascade; a “no record” conclusion routes", kind: "query", mode: "automated" },
+  { k: "Tax certificate", d: "VQ-E4 — auto when on file in vendor storage (Epic N), else routes", kind: "query", mode: "automated" },
+  { k: "Tax-rate explanation", d: "Stretch — rule-based; escalate if it doesn’t reconcile", kind: "query", mode: "human" },
+  { k: "Statement reconciliation", d: "Stretch — depends on stage/reason data access", kind: "query", mode: "human" },
+  { k: "Bank-detail change", d: "State-changing action — captured & routed, never auto-applied (Epic I)", kind: "action", mode: "human", locked: true },
+  { k: "Address change", d: "State-changing action — always routed to a human (G0)", kind: "action", mode: "human", locked: true },
 ];
+const MODES = ["off", "human", "automated"];
+const MODE_LABEL = { off: "Off", human: "Human", automated: "Automated" };
+let cfgVendor = null;                 // vendor selected in the per-vendor config picker
+const vendorCfg = { "Car Station Automotive Inc.": { autoReply: false } };  // overrides (default on)
 function renderConfig() {
   VIEW.innerHTML = `
     <div class="page-head">
       <div class="page-title">Workflow Configuration</div>
-      <div class="page-desc">Configuration over code (the platform principle). Everything below is set per workflow (per tenant) — which capabilities are on, confidence thresholds, languages, entities and SLAs. The answer engine simply won't attempt a disabled capability; those queries route to a human.</div>
+      <div class="page-desc">Configuration over code (the platform principle). Everything below is set per workflow (per tenant) — per-intent handling mode, confidence thresholds, entities, SLAs — with per-vendor overrides layered on top. “Automated” never overrides the gates: an automated intent at low confidence or failed identity still routes to a human.</div>
     </div>
     <div class="cfg-grid">
       <div class="card card-pad">
-        <div class="section-label">Enabled capabilities <span class="sl-side">coarse on/off · set once</span></div>
-        ${CAPS.map((c,i) => `<div class="cfg-cap"><div class="cc-info"><strong>${c.k} ${c.locked?'<span class="tag" style="margin-left:4px">locked</span>':''}</strong><span>${c.d}</span></div><div class="toggle ${c.on?'on':''} ${c.locked?'locked':''}" data-i="${i}"></div></div>`).join("")}
+        <div class="section-label">Per-intent handling mode <span class="sl-side">VQ-L3 · off / human / automated</span></div>
+        <div class="reply-stamp" style="margin:0 0 12px">
+          <strong>Off</strong> — not handled, falls through to a human · <strong>Human</strong> — always routed, even when the system could answer · <strong>Automated</strong> — auto-answer when the gates pass, otherwise route. Actions (bank-detail / address change) are locked to Human — they can never be automated (G0 / §6.1).
+        </div>
+        ${CAPS.map((c,i) => `
+          <div class="cfg-cap">
+            <div class="cc-info"><strong>${c.k} ${c.kind==='action'?'<span class="pill purple no-dot" style="margin-left:4px">action · locked human</span>':''}</strong><span>${c.d}</span></div>
+            <div class="modeseg" data-i="${i}">
+              ${MODES.map(m => {
+                const active = c.mode === m;
+                const disabled = c.kind === 'action' && m === 'automated';
+                return `<button class="modeseg-opt ${active?'active':''} ${disabled?'disabled':''}" data-i="${i}" data-mode="${m}" ${disabled?'disabled':''}>${MODE_LABEL[m]}</button>`;
+              }).join("")}
+            </div>
+          </div>`).join("")}
       </div>
       <div>
         <div class="card card-pad" style="margin-bottom:16px">
-          <div class="section-label">Confidence thresholds <span class="sl-side">mirrors P2P STP gates</span></div>
-          <div class="slider-row"><label>G2 · Answerability</label><input type="range" min="50" max="99" value="82" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">82%</span></div>
-          <div class="slider-row"><label>G4 · Answer confidence</label><input type="range" min="50" max="99" value="90" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">90%</span></div>
-          <div class="reply-stamp" style="margin-top:6px">Below threshold → route to a human rather than guess. A confidently-wrong payment date is worse than a slightly slower human answer.</div>
+          <div class="section-label">Per-vendor configuration <span class="sl-side">VQ-L2 · overrides the workflow default</span></div>
+          <div class="reply-stamp" style="margin:0 0 10px">Layered under the workflow config. The registry has thousands of vendors, so find one to tune it. Starts with auto-reply on/off; the list grows (language pin, SLA, allowed actions) without code changes.</div>
+          <div class="form-row" style="margin-bottom:12px">${vendorPickerHtml("vp-cfg", "Search a vendor to configure…")}</div>
+          <div id="cfg-vendor-box">${cfgVendorBoxHtml()}</div>
+          ${Object.keys(vendorCfg).length ? `<div class="reply-stamp" style="margin-top:10px">Overridden: ${Object.entries(vendorCfg).map(([n,c])=>`${n} (auto-reply ${c.autoReply===false?'off':'on'})`).join(' · ')}</div>` : ''}
+        </div>
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div class="section-label">Confidence & accuracy targets <span class="sl-side">from the PRD §4</span></div>
+          <div class="slider-row"><label>Auto-answer accuracy bar (§4.3)</label><span class="pill green no-dot" style="min-width:auto">95%+ · QA-held</span></div>
+          <div class="slider-row"><label>Routing confidence → human triage (§4.2 / VQ-M4)</label><span class="pill blue no-dot" style="min-width:auto">98%</span></div>
+          <div class="slider-row"><label>Coverage / ingestion target (§4.2)</label><span class="pill blue no-dot" style="min-width:auto">≥ 90%</span></div>
+          <div class="slider-row" style="border:none"><label>G2 · answerability / G4 · answer confidence</label><span class="pill yellow no-dot" style="min-width:auto">Set in Phase 0</span></div>
+          <div class="reply-stamp" style="margin-top:6px">Per the PRD, the G2/G4 gate starting values are an open question (§13.4) — tuned in Phase 0 against the real baseline. Below threshold the gate always routes to a human rather than guess.</div>
         </div>
         <div class="card card-pad" style="margin-bottom:16px">
           <div class="section-label">Legal entities <span class="sl-side">answer is always entity-scoped (Epic C)</span></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">${ENTITIES.map(e=>`<span class="pill blue no-dot">${e.flag} ${e.code} · ${e.ccy}</span>`).join("")}</div>
         </div>
         <div class="card card-pad" style="margin-bottom:16px">
-          <div class="section-label">Languages <span class="sl-side">detected from the inbound message</span></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <span class="pill blue no-dot">🇬🇧 English</span><span class="pill blue no-dot">🇨🇳 Mandarin</span>
-            <span class="pill blue no-dot">🇮🇩 Bahasa Indonesia</span><span class="pill blue no-dot">🇵🇭 Filipino</span>
-            <span class="pill grey no-dot">+ add</span>
+          <div class="section-label">Reply language <span class="sl-side">Phase 1 · §3.2 / §11</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span class="pill green no-dot">🇬🇧 Replies: English</span>
+            <span style="font-size:12px;color:var(--muted)">Inbound accepted in any language; outbound is English-bound. Multi-language replies are a later phase.</span>
           </div>
         </div>
         <div class="card card-pad">
@@ -645,35 +631,201 @@ function renderConfig() {
         </div>
       </div>
     </div>`;
-  $$(".toggle:not(.locked)").forEach(t => t.addEventListener("click", () => t.classList.toggle("on")));
+  $$(".modeseg-opt:not([disabled])").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.i;
+    CAPS[i].mode = b.dataset.mode;
+    renderConfig();
+  }));
+  $$(".toggle:not(.locked):not(.vcfg-toggle)").forEach(t => t.addEventListener("click", () => t.classList.toggle("on")));
+  wireVendorPicker("vp-cfg", v => { cfgVendor = v; $("#cfg-vendor-box").innerHTML = cfgVendorBoxHtml(); wireCfgVendorBox(); });
+  wireCfgVendorBox();
+}
+function cfgVendorBoxHtml() {
+  if (!cfgVendor) return `<div class="cfg-empty">No vendor selected — search above to tune a specific vendor's behaviour.</div>`;
+  const cfg = vendorCfg[cfgVendor.name] || { autoReply: true };
+  return `
+    <div class="cfg-cap" style="border-top:1px solid var(--grey-100);padding-top:14px">
+      <div class="cc-info"><strong>${cfgVendor.name}</strong><span>${cfgVendor.entity ? entLabel(cfgVendor.entity) + ' · ' : ''}${cfgVendor.email || ''}</span></div>
+      <div class="toggle vcfg-toggle ${cfg.autoReply !== false ? 'on' : ''}"></div>
+    </div>
+    <div class="form-hint">Auto-reply to this vendor is <strong id="vcfg-state">${cfg.autoReply !== false ? 'on' : 'off — every query is routed to a human'}</strong>. Vendor settings override the workflow default; changes are audited (VQ-K1).</div>`;
+}
+function wireCfgVendorBox() {
+  const t = $(".vcfg-toggle");
+  if (!t) return;
+  t.addEventListener("click", () => {
+    t.classList.toggle("on");
+    const on = t.classList.contains("on");
+    vendorCfg[cfgVendor.name] = { autoReply: on };
+    $("#vcfg-state").innerHTML = on ? "on" : "off — every query is routed to a human";
+    toast(`Auto-reply ${on ? 'enabled' : 'disabled'} for ${cfgVendor.name}.`);
+  });
 }
 
-/* ─────────────────────────── INGESTION LOG (the un-parsed 7%) ─────────────────────────── */
-let ingState = null;          // runtime copy so "Create query" / "Ignore" persist until refresh
-let ingFilter = "all";        // all | failed | nonquery
-function renderIngestion() {
-  if (!ingState) ingState = UNPARSED.map(u => ({ ...u }));
-  const S = INGEST_SUMMARY;
-  const failed = ingState.filter(u => u.cls === "failed" && !u.resolved).length;
-  const ignored = ingState.filter(u => u.cls === "nonquery").length;
-  const groups = [
-    { key: "all", label: "All inbound (unparsed)", n: ingState.length },
-    { key: "failed", label: "Needs review", n: ingState.filter(u => u.cls === "failed").length, cls: "orange" },
-    { key: "nonquery", label: "Non-query (ignored)", n: ignored, cls: "grey" },
-  ];
-  const rows = ingState.filter(u => ingFilter === "all" || u.cls === ingFilter);
+/* ─────────────────────────── VENDOR STORAGE (Epic N) ─────────────────────────── */
+const VS_ST = {
+  valid:    { cls: "green",  label: "Valid" },
+  expiring: { cls: "yellow", label: "Expiring soon" },
+  expired:  { cls: "red",    label: "Expired · never served" },
+};
+let vsState = null;        // runtime copy so uploads persist within the session
+let vsSearch = "";         // vendor filter
+function renderVendorStorage() {
+  if (!vsState) vsState = VENDOR_STORAGE.map(v => ({ ...v }));
+  const total = vsState.length;
+  const valid = vsState.filter(v => v.status === "valid").length;
+  const expiring = vsState.filter(v => v.status === "expiring").length;
+  const expired = vsState.filter(v => v.status === "expired").length;
+
+  // group documents by vendor; filter by search term
+  const t = vsSearch.trim().toLowerCase();
+  const byVendor = {};
+  vsState.forEach(d => { (byVendor[d.vendor] = byVendor[d.vendor] || []).push(d); });
+  const vendorNames = Object.keys(byVendor)
+    .filter(n => !t || (n + " " + (byVendor[n][0].entity?.name || "")).toLowerCase().includes(t))
+    .sort();
 
   VIEW.innerHTML = `
-    <div class="page-head">
-      <div class="page-title">Ingestion log</div>
-      <div class="page-desc">Coverage = messages parsed into a structured query ÷ all inbound (PRD §4.2). The shortfall is <strong>logged, never dropped</strong> (VQ-A1.5). Genuine misses (a scanned invoice that failed OCR, an unsupported language) can be recovered into a query; correctly-ignored noise (auto-replies, newsletters, bounces) is kept for the audit trail.</div>
+    <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div class="page-title">Vendor storage <span class="tag" style="vertical-align:middle">Epic N</span></div>
+        <div class="page-desc">Documents live <strong>per vendor</strong> — WHT/TDS certificates, Faktur Pajak, and more that AP staff upload or pull from government portals. Once a document is on file and in date, a request for it is auto-answered (VQ-E4 → VQ-E3). <strong>Expired documents are never served</strong> (VQ-N2); every upload, edit, delete and read is audited (VQ-K1).</div>
+      </div>
+      <button class="btn btn-primary btn-sm" id="vs-upload">＋ Upload document</button>
     </div>
 
     <div class="metrics" style="margin-bottom:16px">
-      <div class="metric" style="--c:var(--grey-500)"><div class="m-label">Inbound today</div><div class="m-value">${S.inbound}</div><div class="m-sub">Messages received via Freshdesk</div></div>
-      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Parsed → queries</div><div class="m-value">${S.parsed}</div><div class="m-sub">Became a structured Query record</div></div>
-      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Coverage</div><div class="m-value">${S.coverage}%</div><div class="m-sub">Target ≥ 90%</div></div>
-      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Needs review</div><div class="m-value">${failed}</div><div class="m-sub">Genuine misses — recover into a query</div></div>
+      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Documents on file</div><div class="m-value">${total}</div><div class="m-sub">Across ${Object.keys(byVendor).length} vendors</div></div>
+      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Valid · servable</div><div class="m-value">${valid}</div><div class="m-sub">In date — auto-served when requested</div></div>
+      <div class="metric" style="--c:var(--yellow-500)"><div class="m-label">Expiring soon</div><div class="m-value">${expiring}</div><div class="m-sub">Refresh before they lapse</div></div>
+      <div class="metric" style="--c:var(--red-500)"><div class="m-label">Expired · blocked</div><div class="m-value">${expired}</div><div class="m-sub">Never served — request routes to a human</div></div>
+    </div>
+
+    <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:12px;align-items:center">
+      <div class="search" style="flex:1;max-width:420px"><span>🔍</span><input id="vs-search" placeholder="Search vendor by name…" value="${vsSearch}"/></div>
+      <span style="font-size:12px;color:var(--muted)">${vendorNames.length} vendor${vendorNames.length===1?'':'s'} shown · documents are always scoped to a vendor</span>
+    </div>
+
+    <div id="vs-list">
+    ${vendorNames.length ? vendorNames.map(name => {
+      const docs = byVendor[name];
+      const ent = docs[0].entity;
+      return `<div class="card" style="margin-bottom:14px">
+        <div class="vs-vhead">
+          <div><div class="vs-vname">${name}</div><div class="vs-vmeta">${entLabel(ent)} · ${docs.length} document${docs.length===1?'':'s'} on file</div></div>
+          <button class="btn btn-sm vs-upload-v" data-vendor="${name.replace(/"/g,'&quot;')}">＋ Upload to this vendor</button>
+        </div>
+        <table class="tbl"><thead><tr>
+          <th>Document</th><th>Reference</th><th>Validity</th><th>Status</th><th>Version</th><th>Added by</th><th></th>
+        </tr></thead><tbody>
+        ${docs.map(v => `
+          <tr>
+            <td><span style="margin-right:6px">${v.icon}</span>${v.type}</td>
+            <td class="mono" style="font-size:12px">${v.ref}</td>
+            <td style="font-size:12.5px;color:${v.status==='expired'?'var(--red-600)':v.status==='expiring'?'var(--orange-600)':'var(--muted)'}">${v.validity}</td>
+            <td>${pill(VS_ST[v.status].cls, VS_ST[v.status].label, true)}</td>
+            <td class="mono" style="font-size:12px">${v.version}</td>
+            <td style="font-size:12px;color:var(--muted)">${v.added}</td>
+            <td><button class="btn btn-sm" data-toast="${v.status==='expired'?'Expired — re-upload a current document before it can be served.':'Document preview / version history would open here.'}">${v.status==='expired'?'Re-upload':'View'}</button></td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>`;
+    }).join("") : `<div class="card card-pad" style="text-align:center;color:var(--muted);padding:40px">No vendor matches “${vsSearch}”. <button class="btn btn-sm" id="vs-clear" style="margin-left:8px">Clear search</button></div>`}
+    </div>
+
+    <div class="callout">
+      <h4>🗄️ How storage feeds answers</h4>
+      <p>When a vendor asks for their WHT/TDS certificate or Faktur Pajak, Context Assembly checks that vendor's storage. An <strong>on-file, in-date</strong> document is served automatically — the same look-up-and-send pattern as any document request. If it isn't on file (or has expired), the request routes to a human who pulls it from the government portal. Auto-fetch from the portal itself stays a later build.</p>
+    </div>`;
+
+  $("#vs-upload").addEventListener("click", () => openUploadModal(null));
+  $$(".vs-upload-v").forEach(b => b.addEventListener("click", () => openUploadModal(VENDORS.find(v => v.name === b.dataset.vendor) || { name: b.dataset.vendor })));
+  const s = $("#vs-search");
+  s.addEventListener("input", e => { vsSearch = e.target.value; const pos = e.target.selectionStart; renderVendorStorage(); const n = $("#vs-search"); n.focus(); n.setSelectionRange(pos, pos); });
+  $("#vs-clear")?.addEventListener("click", () => { vsSearch = ""; renderVendorStorage(); });
+}
+
+// Upload modal — scoped to a vendor (preselected when launched from a vendor row)
+function openUploadModal(preVendor) {
+  let chosen = preVendor && preVendor.email ? preVendor : null;
+  const typeOpts = STORAGE_TYPES.map(t => `<option value="${t.type}">${t.icon} ${t.type}</option>`).join("");
+  modal({
+    title: "Upload document",
+    subtitle: "Documents are always stored against a single vendor (Epic N).",
+    primary: "Upload & store",
+    body: `
+      <div class="form-row">
+        <label>Vendor ${preVendor ? '' : '· search the registry'}</label>
+        ${preVendor ? `<div class="field-input" style="background:var(--grey-25)">${preVendor.name}${preVendor.entity ? ` · ${preVendor.entity.flag} ${preVendor.entity.code}` : ''}</div>`
+          : vendorPickerHtml("vp-up", "Search vendor by name or email…")}
+        <div class="form-hint" id="vp-up-hint">${preVendor ? 'Pre-selected from the vendor row.' : 'The registry holds thousands of vendors — start typing to find one.'}</div>
+      </div>
+      <div class="form-grid2">
+        <div class="form-row"><label>Document type</label><select id="up-type">${typeOpts}</select></div>
+        <div class="form-row"><label>Reference no.</label><input type="text" id="up-ref" placeholder="e.g. WHT-SG-2026-Q2"/></div>
+      </div>
+      <div class="form-grid2">
+        <div class="form-row"><label>Valid until</label><input type="date" id="up-valid"/></div>
+        <div class="form-row"><label>File</label><div class="field-input" style="color:var(--muted)">📎 choose a file… (prototype)</div></div>
+      </div>
+      <div class="form-hint">Validity/expiry and version are captured; an expired document is never used in an auto-answer (VQ-N2).</div>`,
+    afterOpen: () => { if (!preVendor) wireVendorPicker("vp-up", v => { chosen = v; $("#vp-up-hint").textContent = `Selected: ${v.name} · ${v.entity.flag} ${v.entity.code}`; }); },
+    onPrimary: () => {
+      if (!chosen) { toast("Pick a vendor first — documents are stored per vendor.", "warn"); return false; }
+      const type = $("#up-type").value;
+      const ref = ($("#up-ref").value || "").trim() || "—";
+      const validRaw = $("#up-valid").value;
+      const st = STORAGE_TYPES.find(x => x.type === type);
+      vsState.unshift({
+        vendor: chosen.name, entity: chosen.entity || null, type, ref,
+        validity: validRaw ? `Valid to ${new Date(validRaw).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}` : "Valid (no expiry set)",
+        status: "valid", version: "v1", added: `${ME} · just now`, icon: st ? st.icon : "📄",
+      });
+      toast(`${type} stored against ${chosen.name}. Audit entry written (VQ-K1).`);
+      renderVendorStorage();
+    },
+  });
+}
+
+/* ─────────────────────────── INGESTION & ROUTING ───────────────────────────
+   Every inbound message is ALWAYS routed to a workflow — there is no unrouted state.
+   The receiving workflow then ACCEPTS or REJECTS it based on its own configuration
+   (an intent switched off, a non-query, or a mis-route). Rejections surface here for a
+   human to re-route to the correct workflow or confirm. Parse failures are recovered.
+   Nothing is ever dropped (Epic M). Decisions are audited (VQ-K1).
+   --------------------------------------------------------------------------------------- */
+let ingState = null;          // runtime copy so actions persist until refresh
+let ingFilter = "reject";     // reject | parse
+function renderIngestion() {
+  if (!ingState) ingState = ROUTING_TRIAGE.map(u => ({ ...u }));
+  const S = INGEST_SUMMARY;
+  const rejectOpen = ingState.filter(u => u.kind === "reject" && !u.resolved).length;
+  const parseOpen = ingState.filter(u => u.kind === "parse" && !u.resolved).length;
+  const tLabel = (k) => (TRIAGE_TARGETS.find(t => t.key === k) || { label: k, cls: "grey" });
+  const groups = [
+    { key: "reject", label: "Workflow rejections", n: ingState.filter(u => u.kind === "reject").length, cls: "purple" },
+    { key: "parse", label: "Parse failures", n: ingState.filter(u => u.kind === "parse").length, cls: "orange" },
+  ];
+  const rows = ingState.filter(u => u.kind === ingFilter);
+  // re-route + (for noise) confirm-rejection actions
+  const actionsFor = (u) => {
+    if (u.kind === "parse") return `<button class="btn btn-primary btn-sm ing-create" data-id="${u.id}">Create query</button> <button class="btn btn-sm ing-raw" data-id="${u.id}">View raw</button>`;
+    const reroute = TRIAGE_TARGETS.map(tg => `<button class="btn btn-sm ${tg.key===u.suggest?'btn-primary':''} ing-route" data-id="${u.id}" data-target="${tg.key}">${tg.label}</button>`).join(" ");
+    const dismiss = u.suggest === "dismiss" ? `<button class="btn btn-sm btn-primary ing-dismiss" data-id="${u.id}">Confirm rejection</button> ` : "";
+    return `<div class="ing-route-actions">${dismiss}${reroute}</div>`;
+  };
+
+  VIEW.innerHTML = `
+    <div class="page-head">
+      <div class="page-title">Ingestion & routing</div>
+      <div class="page-desc"><strong>Every inbound message is routed to a workflow</strong> — there is no unrouted state. The receiving workflow then <strong>accepts or rejects</strong> it based on its own configuration (an intent switched off, a non-query, or a mis-route). Rejections land here to be <strong>re-routed to the correct workflow</strong> (vendor-query / invoice / both) or confirmed; anything that didn't parse is recovered into a query. Nothing is dropped (Epic M); decisions are audited (VQ-K1).</div>
+    </div>
+
+    <div class="metrics" style="margin-bottom:16px">
+      <div class="metric" style="--c:var(--green-500)"><div class="m-label">Messages routed</div><div class="m-value">100%</div><div class="m-sub">Every inbound goes to a workflow — no unrouted state</div></div>
+      <div class="metric" style="--c:var(--primary-500)"><div class="m-label">Routing accuracy</div><div class="m-value">98.1%</div><div class="m-sub">Routed to the correct workflow(s) · target 98%</div></div>
+      <div class="metric" style="--c:var(--purple-500)"><div class="m-label">Workflow rejections</div><div class="m-value">${rejectOpen}</div><div class="m-sub">Rejected per config / mis-route — re-route or confirm</div></div>
+      <div class="metric" style="--c:var(--orange-500)"><div class="m-label">Parse failures</div><div class="m-value">${parseOpen}</div><div class="m-sub">Coverage ${S.coverage}% · recover into a query</div></div>
     </div>
 
     <div class="card">
@@ -681,37 +833,60 @@ function renderIngestion() {
         <div class="chips">
           ${groups.map(g => `<button class="chip ${ingFilter===g.key?'active '+(g.cls||'grey'):''}" data-ing="${g.key}">${g.label}<span class="chip-c">${g.n}</span></button>`).join("")}
         </div>
-        <span style="margin-left:auto;font-size:12px;color:var(--muted)">12 of 168 inbound didn't parse</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--muted)">${ingFilter==='reject'?'The workflow rejected these — re-route to the right workflow (suggested is highlighted) or confirm':'Routed, but couldn’t be parsed — recover into a structured query'}</span>
       </div>
       <table class="tbl"><thead><tr>
-        <th>Raw / Ticket</th><th>Sender</th><th>Subject</th><th>Why it didn't parse</th><th>Classification</th><th>Action</th>
+        <th>Ref / Ticket</th><th>Sender</th><th>Subject</th><th>Routed to</th><th>${ingFilter==='reject'?'Rejected — why':'Why it didn’t parse'}</th><th>Action</th>
       </tr></thead><tbody>
-      ${rows.map((u, i) => `
+      ${rows.length ? rows.map(u => { const rt = tLabel(u.routedTo); return `
         <tr>
           <td class="mono">${u.id}<div style="font-size:10.5px;color:var(--muted)">${u.ref} · ${u.ts}</div></td>
           <td class="mono" style="font-size:12px">${u.sender}</td>
           <td>${u.subject}</td>
+          <td>${pill(rt.cls, rt.label, true)}${u.wrong?` <span class="pill red no-dot" style="margin-top:4px">mis-route</span>`:''}</td>
           <td style="color:var(--muted);font-size:12.5px">${u.reason}</td>
-          <td>${u.resolved ? pill('green','Recovered → '+u.resolved, true) : u.cls==='failed' ? pill('orange','Needs review') : pill('grey','Ignored (non-query)')}</td>
-          <td>${
-            u.resolved ? '<span style="color:var(--muted);font-size:12px">—</span>'
-            : u.cls==='failed'
-              ? `<button class="btn btn-primary btn-sm ing-create" data-id="${u.id}">Create query</button> <button class="btn btn-sm ing-raw" data-id="${u.id}">View raw</button>`
-              : `<button class="btn btn-sm ing-recover" data-id="${u.id}">It's a query</button> <button class="btn btn-sm ing-raw" data-id="${u.id}">View raw</button>`
-          }</td>
-        </tr>`).join("")}
+          <td>${u.resolved ? pill('green', '✓ '+u.resolved, true) : actionsFor(u)}</td>
+        </tr>`; }).join("") : `<tr><td colspan="6" style="text-align:center;padding:36px;color:var(--muted)">Nothing in this queue. 🎉</td></tr>`}
       </tbody></table>
       <div class="dash-foot"><span>${rows.length} items</span><div class="dash-foot-right"><span>Rows per page: 50 ⌄</span><span>1–${rows.length} of ${rows.length}</span><span class="pager">‹ 1 ›</span></div></div>
     </div>`;
 
   $$(".chip[data-ing]").forEach(c => c.addEventListener("click", () => { ingFilter = c.dataset.ing; renderIngestion(); }));
-  $$(".ing-create, .ing-recover").forEach(b => b.addEventListener("click", () => {
+  $$(".ing-route").forEach(b => b.addEventListener("click", () => {
     const u = ingState.find(x => x.id === b.dataset.id);
-    u.resolved = "VQ-48" + (50 + ingState.indexOf(u)); // mock new query id
-    toast(`${u.id} recovered into query ${u.resolved} — now in the Queries dashboard.`);
+    const tg = TRIAGE_TARGETS.find(t => t.key === b.dataset.target);
+    u.resolved = `Re-routed → ${tg.label}`;
+    toast(`${u.id} re-routed to ${tg.label}. Audit entry written (VQ-K1).`);
     renderIngestion();
   }));
-  $$(".ing-raw").forEach(b => b.addEventListener("click", () => toast(`Raw message ${b.dataset.id} would open here.`)));
+  $$(".ing-dismiss").forEach(b => b.addEventListener("click", () => {
+    const u = ingState.find(x => x.id === b.dataset.id);
+    u.resolved = "Rejection confirmed";
+    toast(`${u.id} confirmed as a non-query. Logged for audit (VQ-K1).`);
+    renderIngestion();
+  }));
+  $$(".ing-create").forEach(b => b.addEventListener("click", () => {
+    const u = ingState.find(x => x.id === b.dataset.id);
+    u.resolved = "Recovered → VQ-48" + (50 + ingState.indexOf(u));
+    toast(`${u.id} recovered into a query — now in the Queries dashboard.`);
+    renderIngestion();
+  }));
+  $$(".ing-raw").forEach(b => b.addEventListener("click", () => openRawModal(ingState.find(x => x.id === b.dataset.id))));
+}
+
+function openRawModal(u) {
+  if (!u) return;
+  modal({
+    title: "Raw message",
+    subtitle: `${u.id} · ${u.ref} · ${u.ts}`,
+    primary: null,
+    body: `
+      <div class="email-bubble">
+        <div class="eb-head"><div class="eb-from">${u.sender}</div><div class="eb-to">to: ap-vendors@zalora.com · via Freshdesk</div></div>
+        <div class="eb-body"><div class="eb-subject">${u.subject}</div><div style="color:var(--muted)">— raw body not shown in this prototype —</div></div>
+      </div>
+      <div class="form-hint" style="margin-top:12px">Reason flagged: ${u.reason}</div>`,
+  });
 }
 
 /* ─────────────────────────── INTEGRATIONS (Connector Studio) ─────────────────────────── */
@@ -732,7 +907,7 @@ function renderIntegrations() {
         <div class="page-title">Integrations</div>
         <div class="page-desc">Connect the data Vendor Queries needs — set it all up here on the platform, no separate tooling. Each client's SAP differs, so the ERP layer sits behind a connector abstraction; payment-status answers are only enabled where a read path is live (PRD §10 / §11).</div>
       </div>
-      <button class="btn btn-primary btn-sm" data-toast="New connector wizard would open here.">＋ New connector</button>
+      <button class="btn btn-primary btn-sm" id="conn-new">＋ New connector</button>
     </div>
 
     <div class="metrics" style="margin-bottom:18px">
@@ -757,7 +932,36 @@ function renderIntegrations() {
     renderIntegrations();
   }));
   $$(".conn-card .conn-test").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); toast(`Test ping to ${connState[+b.dataset.i].name}: success (142 ms).`); }));
-  $$(".conn-card .conn-cfg").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); toast(`Configuration for ${connState[+b.dataset.i].name} would open here.`); }));
+  $$(".conn-card .conn-cfg").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); openConnectorModal(connState[+b.dataset.i]); }));
+  $("#conn-new")?.addEventListener("click", () => modal({
+    title: "Add a connector",
+    subtitle: "The ERP layer sits behind a connector abstraction — each client's SAP/ERP plugs in here (§11).",
+    primary: "Continue",
+    body: `
+      <div class="form-row"><label>Connector type</label><select id="nc-type">
+        <option>SAP (RFC / BAPI)</option><option>Zoho Books (REST)</option><option>Freshdesk (Webhook)</option>
+        <option>Object store (S3)</option><option>Vendor master (IDoc)</option><option>Custom / other</option>
+      </select></div>
+      <div class="form-row"><label>Display name</label><input type="text" placeholder="e.g. SAP — Payment doc (APAC)"/></div>
+      <div class="form-hint">A new connector needs a route target + credentials; payment answers only switch on once a read path is verified in Phase 0.</div>`,
+    onPrimary: () => toast("Connector wizard would continue here (prototype)."),
+  }));
+}
+function openConnectorModal(c) {
+  modal({
+    title: `Configure · ${c.name}`,
+    subtitle: `${c.group} · ${c.protocol}`,
+    primary: "Save settings",
+    body: `
+      <div class="form-row"><label>Status</label><div class="field-input" style="background:var(--grey-25)">${ST[c.status].label} · ${c.last}</div></div>
+      <div class="form-grid2">
+        <div class="form-row"><label>Endpoint / host</label><input type="text" value="${c.protocol.includes('REST')||c.protocol.includes('Webhook')?'https://api.'+c.name.toLowerCase().split(' ')[0]+'.example':'sap-prd-apac.internal'}"/></div>
+        <div class="form-row"><label>Poll interval</label><select><option>Real-time (webhook)</option><option>1 min</option><option>5 min</option><option>15 min</option></select></div>
+      </div>
+      <div class="form-row"><label>Read scope</label><div class="field-input" style="color:var(--muted)">${c.desc}</div></div>
+      <div class="form-hint">Credentials are managed securely on the platform; this prototype doesn't store secrets.</div>`,
+    onPrimary: () => toast(`${c.name} settings saved.`),
+  });
 }
 function connCard(c, i) {
   const s = ST[c.status];
@@ -783,10 +987,11 @@ function connCard(c, i) {
 
 /* ─────────────────────────── GUIDED TOUR ─────────────────────────── */
 const TOUR = [
-  { view: "how", title: "1 · The big idea", body: "Vendor Queries auto-answers the ~80% of questions that are simple status checks, and routes the hard ones to a human with context pre-assembled — all behind a strict identity gate. It's a new workflow on the same Neoflo platform as P2P." },
-  { view: "inbox", title: "2 · Watch it run", body: "This is the vendor's email. Click 'Process this email' to watch intake → identity gate → context → answer-or-route happen live. Try the dispute, bank-change and auth-fail messages too." },
-  { view: "worklist", title: "3 · The AP analyst", body: "Everything that needs a human lands here — same Invoice-Dashboard layout your team already uses, with SLA timers, route reasons and Freshdesk tickets. Click a row to open the context bundle." },
-  { view: "analytics", title: "4 · The AP manager", body: "Containment is the north-star, with two hard guardrails at zero: unauthorized disclosures and auto-applied bank changes. Driver analysis feeds the upstream P2P roadmap." },
+  { view: "worklist", title: "1 · The big idea", body: "A shared routing service classifies each ticket reply to the right workflow(s); Vendor Queries then auto-answers the high-volume status checks and routes the hard ones — and every state-changing action — to a human with context pre-assembled. All behind a strict identity gate. Replies are English in Phase 1." },
+  { view: "worklist", title: "2 · The AP analyst", body: "Everything is here — auto-answered and human-routed alike. Click any query to open it: you'll see the vendor's email, the identity result, the assembled context, and the full processing trace. The vendor never logs in; your team works entirely on this platform." },
+  { view: "ingestion", title: "3 · Ingestion & routing", body: "The triage surface. Inbound that didn't parse, plus low-confidence or wrong routing decisions — re-route them to the right workflow (vendor-query / invoice / both). Nothing is ever dropped (VQ-M4)." },
+  { view: "storage", title: "4 · Vendor storage", body: "Per vendor, AP staff upload WHT/TDS certificates and Faktur Pajak. Once on file and in date, a request for one is auto-answered — expired documents are never served (Epic N)." },
+  { view: "analytics", title: "5 · The AP manager", body: "Containment is the north-star (target 40%), with three hard guardrails: zero unauthorized disclosures, zero auto-applied bank changes, and 100% audit coverage. Routing accuracy and driver analysis round it out." },
 ];
 let tourStep = 0;
 function startTour() { tourStep = 0; showTour(); }
@@ -806,6 +1011,7 @@ function showTour() {
 /* ─────────────────────────── BOOT ─────────────────────────── */
 // global handler for lightweight/illustrative buttons (data-toast / data-close)
 document.addEventListener("click", (e) => {
+  if (!e.target.closest(".vpick")) $$(".vpick-drop").forEach(d => d.classList.add("hidden"));
   const go = e.target.closest("[data-go]");
   if (go) { render(go.dataset.go); return; }
   const b = e.target.closest("[data-toast],[data-close]");
@@ -865,6 +1071,34 @@ $$(".ws-opt", wsMenu).forEach(b => b.addEventListener("click", () => {
 }));
 document.addEventListener("click", (e) => { if (!wsMenu.contains(e.target) && e.target.id !== "ws-trigger") wsMenu.classList.add("hidden"); });
 
+/* ─── role switcher (role-based view — user-management PRD) ─── */
+const roleMenu = el(`
+  <div id="role-menu" class="ws-menu hidden">
+    <div class="ws-menu-head">Your role · what you can see & do</div>
+    ${ROLES.map(r => `<button class="ws-opt role-opt" data-role="${r.key}"><div><div class="ws-opt-name">${r.key}</div><div class="ws-opt-desc">${r.desc}</div></div><span class="ws-check role-check">✓</span></button>`).join("")}
+  </div>`);
+document.body.appendChild(roleMenu);
+function paintRoleMenu() {
+  $$(".role-opt", roleMenu).forEach(b => b.classList.toggle("current", b.dataset.role === currentRole));
+}
+$("#role-trigger")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!roleMenu.classList.contains("hidden")) { roleMenu.classList.add("hidden"); return; }
+  paintRoleMenu();
+  const r = $("#role-trigger").getBoundingClientRect();
+  roleMenu.style.top = (r.bottom + 8) + "px"; roleMenu.style.left = r.left + "px";
+  roleMenu.classList.remove("hidden");
+});
+$$(".role-opt", roleMenu).forEach(b => b.addEventListener("click", () => {
+  roleMenu.classList.add("hidden");
+  if (b.dataset.role === currentRole) return;
+  currentRole = b.dataset.role;
+  applyRoleAccess();
+  render(roleDef(currentRole).views.includes(currentView) ? currentView : "worklist");
+  toast(`Viewing as ${currentRole}. Nav and actions now reflect this role.`, "info");
+}));
+document.addEventListener("click", (e) => { if (!roleMenu.contains(e.target) && e.target.id !== "role-trigger" && !e.target.closest("#role-trigger")) roleMenu.classList.add("hidden"); });
+
 function logout() {
   const screen = el(`
     <div id="signin" class="signin">
@@ -883,4 +1117,5 @@ function logout() {
 
 $$(".sb-child").forEach(c => c.addEventListener("click", () => render(c.dataset.view)));
 $("#proto-tour").addEventListener("click", startTour);
+applyRoleAccess();    // role-based nav (defaults to Org admin)
 render("worklist");   // action dashboard is the default view
