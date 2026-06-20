@@ -152,7 +152,7 @@ function renderWorklist() {
     <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end">
       <div>
         <div class="page-title">Queries</div>
-        <div class="page-desc">Every vendor query in one place — auto-answered and human-routed alike. Filter by outcome, entity or type. Auto-answered queries were contained with no human touch; the rest open a summarized view with a suggested reply you can edit and send.</div>
+        <div class="page-desc">Every vendor query in one place — auto-answered and human-routed alike. Open any to see the context and a suggested reply.</div>
       </div>
       <button class="btn btn-primary btn-sm" id="wl-new">＋ New manual query</button>
     </div>
