@@ -35,12 +35,12 @@
         <a class="sb-child active" data-view="worklist" title="Queries">
           <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg></span>
           <span class="sb-ctext">Queries</span><span class="sb-count" id="nav-open-count">6</span></a>
-        <a class="sb-child" data-view="inbox" title="Vendor Inbox (demo)">
-          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span>
-          <span class="sb-ctext">Vendor Inbox</span><span class="sb-badge" title="Simulator — an interactive demo of vendor emails flowing through the pipeline. Not a live mailbox.">demo</span></a>
-        <a class="sb-child" data-view="ingestion" title="Ingestion log">
+        <a class="sb-child" data-view="ingestion" title="Ingestion & routing log">
           <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.4 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.8 1.1z"/></svg></span>
-          <span class="sb-ctext">Ingestion log</span></a>
+          <span class="sb-ctext">Ingestion & routing</span></a>
+        <a class="sb-child" data-view="storage" title="Vendor storage">
+          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></span>
+          <span class="sb-ctext">Vendor storage</span></a>
         <a class="sb-child" data-view="analytics" title="Analytics">
           <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="8"/><line x1="18" y1="20" x2="18" y2="11"/></svg></span>
           <span class="sb-ctext">Analytics</span></a>
@@ -50,9 +50,6 @@
         <a class="sb-child" data-view="config" title="Configuration">
           <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
           <span class="sb-ctext">Configuration</span></a>
-        <a class="sb-child" data-view="how" title="How it works">
-          <span class="sb-cico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-          <span class="sb-ctext">How it works</span></a>
       </nav>
 
       <div class="sb-footer">
@@ -72,6 +69,11 @@
           <div class="tb-sub" id="tb-sub">How it works</div>
         </div>
         <div class="tb-right">
+          <button class="tb-role-trigger" id="role-trigger" title="Switch role (preview the role-based view)">
+            <span class="tb-role-ico">👤</span>
+            <span class="tb-role-label" id="role-label">Org admin</span>
+            <span class="tb-caret">⌄</span>
+          </button>
           <button class="tb-ws-trigger" id="ws-trigger">
             <span class="tb-ws-mark">VQ</span>
             <span class="tb-ws-name">Vendor Queries</span>
